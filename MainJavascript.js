@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://unoriginally-cnidogenous-josh.ngrok-free.dev/api";
+const API_BASE_URL = "https://support-backend-ldos.onrender.com";
 let pendingTimeOutStudent = null;
 let pendingTimeOutAction = null;
 let settingsClickCount = 0; 

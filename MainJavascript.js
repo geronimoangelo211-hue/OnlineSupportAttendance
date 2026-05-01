@@ -168,14 +168,22 @@ setInterval(() => {
     }
 }, 60000);
 
-// ==========================================
-// 3. ADMIN AUTHENTICATION
-// ==========================================
 async function loginAdmin(event) {
-    event.preventDefault();
-    const usernameInput = document.getElementById('admin-username').value;
-    const passwordInput = document.getElementById('admin-password').value;
-    const errorMsg = document.getElementById('login-error');
+    if (event) event.preventDefault();
+    
+    // 1. Get exact IDs from index.html
+    const usernameInput = document.getElementById('admin-user').value;
+    const passwordInput = document.getElementById('admin-pass').value;
+    const captchaInput = document.getElementById('admin-captcha-input').value;
+    const errorMsg = document.getElementById('login-message');
+
+    // 2. Verify the Captcha BEFORE asking the server
+    if (!captchaInput || captchaInput !== currentAdminCaptchaString) {
+        errorMsg.textContent = "Security check failed. Please enter the correct text.";
+        errorMsg.style.display = 'block';
+        generateAdminCaptcha(); // Reset the puzzle
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE_URL}/login`, {
@@ -193,18 +201,27 @@ async function loginAdmin(event) {
         }
 
         if (data.success) {
-            document.getElementById('login-section').style.display = 'none';
-            document.getElementById('admin-dashboard').style.display = 'block';
+            // 3. Save login state and switch views securely
+            sessionStorage.setItem('adminLoggedIn', 'true');
+            switchView('admin-dashboard-view');
             
-            // Sync completely upon login
+            // Clear inputs for the next time
+            document.getElementById('admin-user').value = '';
+            document.getElementById('admin-pass').value = '';
+            document.getElementById('admin-captcha-input').value = '';
+            errorMsg.textContent = '';
+            
+            // 4. Sync completely upon login
             await pullFromCloud();
             fetchAdminAccounts();
             renderStudents();
             renderLogs(); 
             renderMainDashboard();
+            renderDutyToday();
         } else {
             errorMsg.textContent = data.message || "Invalid credentials.";
             errorMsg.style.display = 'block';
+            generateAdminCaptcha(); // Reset puzzle on wrong password
         }
     } catch (error) {
         errorMsg.textContent = "Server error. Please try again.";

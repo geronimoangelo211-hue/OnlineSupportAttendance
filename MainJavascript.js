@@ -87,32 +87,30 @@ if (_needsSave) {
     pushStudentsToCloud(); // Sync fix to cloud
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Attempt to download the latest data from the cloud on load
-    await pullFromCloud();
-
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Instantly load the UI so the user isn't staring at a broken screen
     initDevUI();
-    loadAccentColor(); 
-    document.body.classList.add('portal-mode'); 
-    
-    checkAndApplyAutoNoAttendance();
-    checkAndApplyAutoTimeOut(); 
+    loadAccentColor();
+    document.body.classList.add('portal-mode');
 
-    const isPrivate = await isIncognito();
-    if (isPrivate) {
-        document.getElementById('turn-in-form').style.display = 'none';
-        document.getElementById('locked-screen').style.display = 'none';
-        document.getElementById('incognito-screen').style.display = 'block';
-    } else {
-        checkDeviceLock(); 
-        setTimeout(initSliderCaptcha, 50); 
-    }
+    // 2. Draw the captcha and check device locks immediately (No waiting!)
+    checkDeviceLock();
+    setTimeout(initSliderCaptcha, 50);
+
+    // 3. Check for incognito mode in the background
+    isIncognito().then(isPrivate => {
+        if (isPrivate) {
+            document.getElementById('turn-in-form').style.display = 'none';
+            document.getElementById('locked-screen').style.display = 'none';
+            document.getElementById('incognito-screen').style.display = 'block';
+        }
+    });
 
     generateAdminCaptcha();
 
     const adminCanvas = document.getElementById('admin-captcha-canvas');
     if (adminCanvas) adminCanvas.addEventListener('click', generateAdminCaptcha);
-    
+
     const thumb = document.getElementById('studentSliderThumb');
     if (thumb) {
         thumb.addEventListener('mousedown', onDragStart);
@@ -122,14 +120,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.addEventListener('mouseup', onDragEnd);
         window.addEventListener('touchend', onDragEnd);
     }
-    
+
     const refreshBtn = document.getElementById('studentRefreshCaptcha');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             if(!isCaptchaSolved) initSliderCaptcha();
         });
     }
-    
+
     if (sessionStorage.getItem('adminLoggedIn') === 'true') {
         switchView('admin-dashboard-view');
         const savedSec = sessionStorage.getItem('currentAdminSec') || 'sec-dashboard';
@@ -142,6 +140,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         switchAdminSection(savedSec, targetNav);
     }
+
+    // 4. FINALLY: Pull data from Render in the background. 
+    // By removing 'await', the website loads instantly while the backend wakes up silently!
+    pullFromCloud().then(() => {
+        // If an admin happens to be logged in when the data arrives, refresh their screen
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderStudents();
+            renderLogs();
+            renderMainDashboard();
+            renderDutyToday();
+        }
+    });
 });
 
 setInterval(() => {

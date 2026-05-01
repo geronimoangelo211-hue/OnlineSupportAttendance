@@ -26,7 +26,7 @@ async function pullFromCloud() {
             }
         }
     } catch (err) {
-        console.warn("Cloud pull delayed. Render might be sleeping.");
+        console.warn("Cloud pull delayed.");
     }
 }
 
@@ -52,9 +52,6 @@ async function pushLogsToCloud() {
     } catch (err) { console.error("Cloud Log Sync Failed"); }
 }
 
-// ==========================================
-// 2. INITIALIZATION & STATE
-// ==========================================
 let pendingTimeOutStudent = null;
 let pendingTimeOutAction = null;
 let settingsClickCount = 0; 
@@ -156,8 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// NEW 15-SECOND BACKGROUND SYNC
-// Constantly keeps phones and laptops completely synced automatically
 setInterval(async () => {
     await pullFromCloud(); 
     
@@ -174,9 +169,6 @@ setInterval(async () => {
     }
 }, 15000);
 
-// ==========================================
-// 3. ADMIN AUTHENTICATION
-// ==========================================
 async function loginAdmin(event) {
     if (event) event.preventDefault();
     const usernameInput = document.getElementById('admin-user').value;
@@ -239,9 +231,6 @@ function logoutAdmin() {
     switchView('student-view');
 }
 
-// ==========================================
-// 4. ADMIN ACCOUNTS (CLOUD DIRECT)
-// ==========================================
 async function createAdminAccount() {
     const user = document.getElementById('new-admin-user').value.trim();
     const pass = document.getElementById('new-admin-pass').value.trim();
@@ -311,9 +300,27 @@ async function deleteAdminAccount(user) {
     } catch(err) { alert('Server error connecting to backend.'); }
 }
 
-// ==========================================
-// 5. STUDENT DATA MANAGEMENT
-// ==========================================
+async function generateRegistrationLink() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
+        const data = await response.json();
+        
+        const link = `${window.location.origin}/register.html?token=${data.token}`;
+        
+        document.getElementById('reg-link-container').style.display = 'block';
+        document.getElementById('reg-link-output').value = link;
+    } catch (err) {
+        alert("Failed to generate link. Server might be offline.");
+    }
+}
+
+function copyRegLink() {
+    const linkInput = document.getElementById('reg-link-output');
+    linkInput.select();
+    document.execCommand("copy");
+    alert("Secure link copied! Send this to the students.");
+}
+
 async function createStudent() {
     const name = document.getElementById('new-student-name').value.trim();
     const idNum = document.getElementById('new-student-id').value.trim();
@@ -324,7 +331,6 @@ async function createStudent() {
         return;
     }
 
-    // PRE-SYNC: Ensure we have the absolute latest data before saving
     await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -419,8 +425,6 @@ async function deleteStudent(idNum) {
 }
 
 async function toggleStudentDay(id, day) {
-    // REMOVED pullFromCloud() here to prevent rapid-click race conditions!
-    
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => s.id === id);
     
@@ -433,10 +437,8 @@ async function toggleStudentDay(id, day) {
             student.assignedDays.push(day);
         }
         
-        // Save locally instantly
         localStorage.setItem('students', JSON.stringify(students));
         
-        // Update UI instantly without waiting for the server
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderSchedule();
             renderMainDashboard();
@@ -445,7 +447,6 @@ async function toggleStudentDay(id, day) {
             renderDutyToday();
         }
 
-        // Push to cloud silently in the background
         pushStudentsToCloud(); 
     }
 }
@@ -498,23 +499,23 @@ async function deleteLog(originalIndex) {
 function deleteHistoryDate(dateStr, event) {
     if (event) event.stopPropagation(); 
     
-    if(confirm(`⚠️ WARNING ⚠️\n\nAre you sure you want to completely delete ALL attendance logs for ${dateStr}?\n\nThis action cannot be undone.`)) {
+    if(confirm(`⚠️ WARNING ⚠️\n\nAre you sure you want to completely delete ALL attendance logs for ${dateStr}?\n\nThis will permanently remove this day from the students' Performance Stats.`)) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         logs = logs.filter(l => l.date !== dateStr);
         
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+        
         pushLogsToCloud(); 
         
         renderHistoryView();
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderMainDashboard();
+        }
         
         const titleEl = document.getElementById('history-table-title');
         if (titleEl && titleEl.textContent.includes(dateStr)) {
             document.getElementById('history-table-container').style.display = 'none';
-        }
-        
-        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-            renderMainDashboard();
         }
     }
 }
@@ -534,9 +535,6 @@ async function devClearLogs() {
     }
 }
 
-// ==========================================
-// 7. TIME IN / TIME OUT LOGIC 
-// ==========================================
 async function handleTimeIn() {
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -552,7 +550,6 @@ async function handleTimeIn() {
         return; 
     }
 
-    // PRE-SYNC: Ensure student has the absolute newest schedule before verifying!
     await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -623,7 +620,6 @@ async function handleTimeOut() {
         return; 
     }
 
-    // PRE-SYNC: Refresh device data before verifying
     await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -733,9 +729,6 @@ async function finalizeTimeOut() {
     checkDeviceLock(); 
 }
 
-// ==========================================
-// 8. AUTO-CALCULATIONS
-// ==========================================
 function checkAndApplyAutoNoAttendance() {
     const pht = getPHT();
     if (pht.getHours() < 19) return false; 
@@ -819,25 +812,9 @@ function checkAndApplyAutoTimeOut() {
 }
 
 function enforceHistoryLimit() {
-    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    let uniqueDates = [...new Set(logs.map(l => l.date))];
     
-    uniqueDates.sort((a, b) => new Date(a) - new Date(b));
-
-    // Changed from > 30 to > 12
-    if (uniqueDates.length > 12) {
-        // Keeps only the 12 newest dates, permanently deletes the rest
-        const datesToKeep = uniqueDates.slice(-12);
-        logs = logs.filter(l => datesToKeep.includes(l.date));
-        
-        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); 
-    }
 }
 
-// ==========================================
-// 9. UI RENDERING LOGIC (Local Arrays for Speed)
-// ==========================================
 function renderStudents() {
     const list = document.getElementById('registered-students-list');
     if (!list) return;
@@ -875,9 +852,6 @@ function searchStudents() {
     renderStudents();
 }
 
-// ==========================================
-// 10. ALL UNMODIFIED UI & CAPTCHA FUNCTIONS BELOW
-// ==========================================
 function changeAccentColor(colorName) {
     const colorData = ACCENT_COLORS[colorName];
     if (colorData) {
@@ -1331,17 +1305,19 @@ function renderHistoryView() {
     
     uniqueDates.sort((a, b) => new Date(b) - new Date(a)); 
 
+    const displayDates = uniqueDates.slice(0, 12);
+
     const container = document.getElementById('history-cards-container');
     if(!container) return;
     container.innerHTML = '';
 
-    if (uniqueDates.length === 0) {
+    if (displayDates.length === 0) {
         container.innerHTML = '<p class="placeholder-text">No history available yet.</p>';
         document.getElementById('history-table-container').style.display = 'none';
         return;
     }
 
-    uniqueDates.forEach(dateStr => {
+    displayDates.forEach(dateStr => {
         const card = document.createElement('div');
         card.className = 'history-card';
         card.onclick = () => renderHistoryTable(dateStr);
@@ -1555,7 +1531,7 @@ function renderMainDashboard() {
         }
 
         const twelveDaysAgo = new Date(getPHT());
-        twelveDaysAgo.setDate(twelveDaysAgo.getDate() - 12); // Changed from - 30 to - 12
+        twelveDaysAgo.setDate(twelveDaysAgo.getDate() - 12); 
         
         const deadStudentsList = document.getElementById('dash-dead-students');
         if (deadStudentsList) {
@@ -1569,7 +1545,6 @@ function renderMainDashboard() {
                     deadStudentsList.innerHTML += `<div style="padding: 10px; border-bottom: 1px solid #2d313c;">${student.name} <span style="color:var(--error); font-size: 10px; float:right;">INACTIVE</span></div>`;
                 }
             });
-
             if (deadCount === 0) {
                 deadStudentsList.innerHTML = '<p class="placeholder-text">No inactive students.</p>';
             }
@@ -2159,26 +2134,4 @@ function factoryReset() {
             alert("Factory Reset canceled. The text did not match exactly.");
         }
     }
-}
-
-async function generateRegistrationLink() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
-        const data = await response.json();
-        
-        // Creates a link pointing to the new registration page
-        const link = `${window.location.origin}/register.html?token=${data.token}`;
-        
-        document.getElementById('reg-link-container').style.display = 'block';
-        document.getElementById('reg-link-output').value = link;
-    } catch (err) {
-        alert("Failed to generate link. Server might be offline.");
-    }
-}
-
-function copyRegLink() {
-    const linkInput = document.getElementById('reg-link-output');
-    linkInput.select();
-    document.execCommand("copy");
-    alert("Secure link copied! Send this to the students.");
 }

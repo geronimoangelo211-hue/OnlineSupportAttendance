@@ -1569,7 +1569,7 @@ function renderMainDashboard() {
                     deadStudentsList.innerHTML += `<div style="padding: 10px; border-bottom: 1px solid #2d313c;">${student.name} <span style="color:var(--error); font-size: 10px; float:right;">INACTIVE</span></div>`;
                 }
             });
-            
+
             if (deadCount === 0) {
                 deadStudentsList.innerHTML = '<p class="placeholder-text">No inactive students.</p>';
             }
@@ -2159,4 +2159,26 @@ function factoryReset() {
             alert("Factory Reset canceled. The text did not match exactly.");
         }
     }
+}
+
+async function generateRegistrationLink() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
+        const data = await response.json();
+        
+        // Creates a link pointing to the new registration page
+        const link = `${window.location.origin}/register.html?token=${data.token}`;
+        
+        document.getElementById('reg-link-container').style.display = 'block';
+        document.getElementById('reg-link-output').value = link;
+    } catch (err) {
+        alert("Failed to generate link. Server might be offline.");
+    }
+}
+
+function copyRegLink() {
+    const linkInput = document.getElementById('reg-link-output');
+    linkInput.select();
+    document.execCommand("copy");
+    alert("Secure link copied! Send this to the students.");
 }

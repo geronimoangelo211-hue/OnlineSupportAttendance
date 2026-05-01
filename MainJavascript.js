@@ -3,19 +3,34 @@
 // ==========================================
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 
-// CLOUD PULL: Gets data from Render and updates LocalStorage
+// CLOUD PULL: Gets data from Render and updates LocalStorage intelligently
 async function pullFromCloud() {
     try {
-        const stuRes = await fetch(`${API_BASE_URL}/students`);
+        // --- SYNC STUDENTS ---
+        // ADDED 'no-store' so mobile phones never use outdated cached data!
+        const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
         if (stuRes.ok) {
-            const students = await stuRes.json();
-            if (students.length > 0) localStorage.setItem('students', JSON.stringify(students));
+            const cloudStudents = await stuRes.json();
+            const localStudents = JSON.parse(localStorage.getItem('students')) || [];
+
+            if (cloudStudents.length > 0) {
+                localStorage.setItem('students', JSON.stringify(cloudStudents));
+            } else if (localStudents.length > 0) {
+                await pushStudentsToCloud();
+            }
         }
         
-        const logRes = await fetch(`${API_BASE_URL}/logs`);
+        // --- SYNC LOGS ---
+        const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
         if (logRes.ok) {
-            const logs = await logRes.json();
-            if (logs.length > 0) localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+            const cloudLogs = await logRes.json();
+            const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+
+            if (cloudLogs.length > 0) {
+                localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
+            } else if (localLogs.length > 0) {
+                await pushLogsToCloud();
+            }
         }
     } catch (err) {
         console.warn("Cloud pull delayed. Render might be sleeping.");
@@ -84,20 +99,17 @@ _studentsInit.forEach(s => {
 });
 if (_needsSave) {
     localStorage.setItem('students', JSON.stringify(_studentsInit));
-    pushStudentsToCloud(); // Sync fix to cloud
+    pushStudentsToCloud();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Instantly load the UI so the user isn't staring at a broken screen
     initDevUI();
     loadAccentColor();
     document.body.classList.add('portal-mode');
 
-    // 2. Draw the captcha and check device locks immediately (No waiting!)
     checkDeviceLock();
     setTimeout(initSliderCaptcha, 50);
 
-    // 3. Check for incognito mode in the background
     isIncognito().then(isPrivate => {
         if (isPrivate) {
             document.getElementById('turn-in-form').style.display = 'none';
@@ -141,47 +153,49 @@ document.addEventListener('DOMContentLoaded', () => {
         switchAdminSection(savedSec, targetNav);
     }
 
-    // 4. FINALLY: Pull data from Render in the background. 
-    // By removing 'await', the website loads instantly while the backend wakes up silently!
     pullFromCloud().then(() => {
-        // If an admin happens to be logged in when the data arrives, refresh their screen
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderStudents();
             renderLogs();
             renderMainDashboard();
             renderDutyToday();
+            renderSchedule();
         }
     });
 });
 
-setInterval(() => {
+// NEW 15-SECOND BACKGROUND SYNC
+// Constantly keeps phones and laptops completely synced automatically
+setInterval(async () => {
+    await pullFromCloud(); 
+    
     let updatedNoAtt = checkAndApplyAutoNoAttendance();
     let updatedTimeOut = checkAndApplyAutoTimeOut(); 
     
-    if (updatedNoAtt || updatedTimeOut) {
-        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-            renderDashboardSummary();
-            renderLogs();
-            renderMainDashboard();
-            renderDutyToday();
-        }
+    if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+        renderStudents();
+        renderSchedule();
+        renderDashboardSummary();
+        renderLogs();
+        renderMainDashboard();
+        renderDutyToday();
     }
-}, 60000);
+}, 15000);
 
+// ==========================================
+// 3. ADMIN AUTHENTICATION
+// ==========================================
 async function loginAdmin(event) {
     if (event) event.preventDefault();
-    
-    // 1. Get exact IDs from index.html
     const usernameInput = document.getElementById('admin-user').value;
     const passwordInput = document.getElementById('admin-pass').value;
     const captchaInput = document.getElementById('admin-captcha-input').value;
     const errorMsg = document.getElementById('login-message');
 
-    // 2. Verify the Captcha BEFORE asking the server
     if (!captchaInput || captchaInput !== currentAdminCaptchaString) {
         errorMsg.textContent = "Security check failed. Please enter the correct text.";
         errorMsg.style.display = 'block';
-        generateAdminCaptcha(); // Reset the puzzle
+        generateAdminCaptcha(); 
         return;
     }
 
@@ -201,27 +215,25 @@ async function loginAdmin(event) {
         }
 
         if (data.success) {
-            // 3. Save login state and switch views securely
             sessionStorage.setItem('adminLoggedIn', 'true');
             switchView('admin-dashboard-view');
             
-            // Clear inputs for the next time
             document.getElementById('admin-user').value = '';
             document.getElementById('admin-pass').value = '';
             document.getElementById('admin-captcha-input').value = '';
             errorMsg.textContent = '';
             
-            // 4. Sync completely upon login
             await pullFromCloud();
             fetchAdminAccounts();
             renderStudents();
             renderLogs(); 
             renderMainDashboard();
+            renderSchedule();
             renderDutyToday();
         } else {
             errorMsg.textContent = data.message || "Invalid credentials.";
             errorMsg.style.display = 'block';
-            generateAdminCaptcha(); // Reset puzzle on wrong password
+            generateAdminCaptcha(); 
         }
     } catch (error) {
         errorMsg.textContent = "Server error. Please try again.";
@@ -310,7 +322,7 @@ async function deleteAdminAccount(user) {
 // ==========================================
 // 5. STUDENT DATA MANAGEMENT
 // ==========================================
-function createStudent() {
+async function createStudent() {
     const name = document.getElementById('new-student-name').value.trim();
     const idNum = document.getElementById('new-student-id').value.trim();
     const gcHandle = document.getElementById('new-student-gc').value.trim();
@@ -319,6 +331,9 @@ function createStudent() {
         showMessage('admin-message', 'Please fill in Name and ID fields.', 'error');
         return;
     }
+
+    // PRE-SYNC: Ensure we have the absolute latest data before saving
+    await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
     
@@ -335,7 +350,7 @@ function createStudent() {
     });
     
     localStorage.setItem('students', JSON.stringify(students));
-    pushStudentsToCloud(); // Sync to cloud
+    await pushStudentsToCloud(); 
     
     document.getElementById('new-student-name').value = '';
     document.getElementById('new-student-id').value = '';
@@ -350,7 +365,7 @@ function createStudent() {
     renderDutyToday();
 }
 
-function updateStudentGC() {
+async function updateStudentGC() {
     const idNum = document.getElementById('edit-student-id').value.trim();
     const newGc = document.getElementById('edit-student-gc').value.trim();
 
@@ -358,6 +373,8 @@ function updateStudentGC() {
         showMessage('edit-gc-message', 'Please enter a Student ID.', 'error');
         return;
     }
+
+    await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const studentIndex = students.findIndex(s => s.id === idNum);
@@ -369,7 +386,7 @@ function updateStudentGC() {
 
     students[studentIndex].gcHandle = newGc;
     localStorage.setItem('students', JSON.stringify(students));
-    pushStudentsToCloud(); // Sync to cloud
+    await pushStudentsToCloud(); 
 
     document.getElementById('edit-student-id').value = '';
     document.getElementById('edit-student-gc').value = '';
@@ -383,13 +400,15 @@ function updateStudentGC() {
     renderDutyToday();
 }
 
-function deleteStudent(idNum) {
+async function deleteStudent(idNum) {
     if (!confirm("Are you sure you want to remove this student? This will not delete their existing logs but will prevent them from logging in.")) return;
     
+    await pullFromCloud();
+
     let students = JSON.parse(localStorage.getItem('students')) || [];
     students = students.filter(s => s.id !== idNum);
     localStorage.setItem('students', JSON.stringify(students));
-    pushStudentsToCloud(); // Sync to cloud
+    await pushStudentsToCloud(); 
     
     const searchStudInput = document.getElementById('search-student');
     if (searchStudInput && searchStudInput.value.trim() !== '') {
@@ -407,7 +426,10 @@ function deleteStudent(idNum) {
     }
 }
 
-function toggleStudentDay(id, day) {
+async function toggleStudentDay(id, day) {
+    // PRE-SYNC: Prevent overwriting schedules done on other devices
+    await pullFromCloud();
+
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => s.id === id);
     
@@ -421,7 +443,7 @@ function toggleStudentDay(id, day) {
         }
         
         localStorage.setItem('students', JSON.stringify(students));
-        pushStudentsToCloud(); // Sync to cloud
+        await pushStudentsToCloud(); 
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderSchedule();
@@ -436,7 +458,8 @@ function toggleStudentDay(id, day) {
 // ==========================================
 // 6. ATTENDANCE LOGGING & SYNCING
 // ==========================================
-function logAttendanceAction(student, action, endOfShiftDetails = null) {
+async function logAttendanceAction(student, action, endOfShiftDetails = null) {
+    await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const pht = getPHT();
     const timeStr = pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -452,7 +475,7 @@ function logAttendanceAction(student, action, endOfShiftDetails = null) {
     });
     
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-    pushLogsToCloud(); // Sync to cloud
+    await pushLogsToCloud();
 
     enforceHistoryLimit(); 
     
@@ -464,14 +487,15 @@ function logAttendanceAction(student, action, endOfShiftDetails = null) {
     }
 }
 
-function deleteLog(originalIndex) {
+async function deleteLog(originalIndex) {
     if (!confirm("Delete this attendance record?")) return;
     
+    await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     logs.splice(originalIndex, 1); 
     
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-    pushLogsToCloud(); // Sync to cloud
+    await pushLogsToCloud(); 
     
     renderLogs();
     renderMainDashboard();
@@ -479,13 +503,14 @@ function deleteLog(originalIndex) {
     renderDutyToday();
 }
 
-function deleteHistoryDate(dateStr, event) {
+async function deleteHistoryDate(dateStr, event) {
     event.stopPropagation(); 
     if(confirm(`⚠️ WARNING ⚠️\n\nAre you sure you want to completely delete ALL attendance logs for ${dateStr}?\n\nThis action cannot be undone.`)) {
+        await pullFromCloud();
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         logs = logs.filter(l => l.date !== dateStr);
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); // Sync to cloud
+        await pushLogsToCloud(); 
         
         renderHistoryView();
         
@@ -496,10 +521,10 @@ function deleteHistoryDate(dateStr, event) {
     }
 }
 
-function devClearLogs() {
+async function devClearLogs() {
     if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
-        pushLogsToCloud(); // Sync to cloud
+        await pushLogsToCloud(); 
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderLogs();
@@ -512,9 +537,9 @@ function devClearLogs() {
 }
 
 // ==========================================
-// 7. TIME IN / TIME OUT LOGIC (Unchanged UI)
+// 7. TIME IN / TIME OUT LOGIC 
 // ==========================================
-function handleTimeIn() {
+async function handleTimeIn() {
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
         initSliderCaptcha();
@@ -528,6 +553,9 @@ function handleTimeIn() {
         initSliderCaptcha();
         return; 
     }
+
+    // PRE-SYNC: Ensure student has the absolute newest schedule before verifying!
+    await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => s.id === idNum);
@@ -567,13 +595,13 @@ function handleTimeIn() {
         initSliderCaptcha();
         return;
     } else if (hour >= 19) { 
-        logAttendanceAction(student, 'No Attendance');
+        await logAttendanceAction(student, 'No Attendance');
         showLockedScreen('You missed your Time In for today. You are marked as No Attendance.');
     } else if (hour >= 9) { 
-        logAttendanceAction(student, 'Time In (Late)');
+        await logAttendanceAction(student, 'Time In (Late)');
         showMessage('student-message', 'Successfully logged Time In (Late)', 'success');
     } else { 
-        logAttendanceAction(student, 'Time In');
+        await logAttendanceAction(student, 'Time In');
         showMessage('student-message', 'Successfully logged Time In', 'success');
     }
     
@@ -582,7 +610,7 @@ function handleTimeIn() {
     checkDeviceLock(); 
 }
 
-function handleTimeOut() {
+async function handleTimeOut() {
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
         initSliderCaptcha();
@@ -596,6 +624,9 @@ function handleTimeOut() {
         initSliderCaptcha();
         return; 
     }
+
+    // PRE-SYNC: Refresh device data before verifying
+    await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => s.id === idNum);
@@ -626,7 +657,7 @@ function handleTimeOut() {
 
     if (!hasTimeIn) {
         if (hour >= 19) {
-            logAttendanceAction(student, 'No Attendance');
+            await logAttendanceAction(student, 'No Attendance');
             showLockedScreen('You missed your Time In for today. You are marked as No Attendance.');
         } else {
             showMessage('student-message', 'No Time In record found for today.', 'error');
@@ -670,7 +701,7 @@ function handleTimeOut() {
     document.getElementById('timeout-modal').style.display = 'flex';
 }
 
-function finalizeTimeOut() {
+async function finalizeTimeOut() {
     let gcHandle = document.getElementById('gc-handle').value;
     const announcement = document.querySelector('input[name="announcement"]:checked');
     const whoPosted = document.querySelector('input[name="who-posted"]:checked');
@@ -686,7 +717,7 @@ function finalizeTimeOut() {
         return;
     }
 
-    logAttendanceAction(pendingTimeOutStudent, pendingTimeOutAction, {
+    await logAttendanceAction(pendingTimeOutStudent, pendingTimeOutAction, {
         gcHandle: gcHandle,
         announcement: announcement.value,
         whoPosted: whoPosted.value
@@ -738,7 +769,7 @@ function checkAndApplyAutoNoAttendance() {
     
     if (updated) {
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); // Sync to cloud
+        pushLogsToCloud(); 
     }
     return updated;
 }
@@ -783,7 +814,7 @@ function checkAndApplyAutoTimeOut() {
 
     if (updated) {
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); // Sync to cloud
+        pushLogsToCloud(); 
         enforceHistoryLimit(); 
     }
     return updated;
@@ -799,7 +830,7 @@ function enforceHistoryLimit() {
         const datesToKeep = uniqueDates.slice(-30);
         logs = logs.filter(l => datesToKeep.includes(l.date));
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); // Sync to cloud
+        pushLogsToCloud(); 
     }
 }
 
@@ -846,7 +877,6 @@ function searchStudents() {
 // ==========================================
 // 10. ALL UNMODIFIED UI & CAPTCHA FUNCTIONS BELOW
 // ==========================================
-// (These were kept exactly as you had them since they don't modify data)
 function changeAccentColor(colorName) {
     const colorData = ACCENT_COLORS[colorName];
     if (colorData) {
@@ -2119,8 +2149,8 @@ function factoryReset() {
         if (verificationText === "RESET EVERYTHING") {
             localStorage.clear();
             sessionStorage.clear();
-            pushStudentsToCloud(); // Wipe cloud
-            pushLogsToCloud(); // Wipe cloud
+            pushStudentsToCloud(); 
+            pushLogsToCloud(); 
             alert("System wiped successfully. The page will now reload.");
             window.location.reload();
         } else if (verificationText !== null) {

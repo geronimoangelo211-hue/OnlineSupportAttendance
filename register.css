@@ -1,0 +1,82 @@
+body {
+    background: #0d1117;
+    color: #e2e8f0;
+    font-family: 'Segoe UI', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+.register-panel {
+    background: #1e2128;
+    padding: 40px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 450px;
+    border: 1px solid #2d313c;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+    text-align: center;
+}
+
+h2 { margin-top: 0; color: #66fcf1; }
+.subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 25px; }
+
+input[type="text"], select {
+    width: 100%;
+    padding: 14px;
+    margin-bottom: 15px;
+    background: #121419;
+    border: 1px solid #333a45;
+    color: white;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+input:focus, select:focus {
+    border-color: #66fcf1;
+    outline: none;
+}
+
+.schedule-label {
+    display: block;
+    text-align: left;
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #94a3b8;
+}
+
+.days-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    text-align: left;
+    margin-bottom: 25px;
+}
+
+.day-checkbox {
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid transparent;
+}
+.day-checkbox:hover { border-color: #66fcf1; }
+
+.submit-btn {
+    width: 100%;
+    background: #66fcf1;
+    color: #000;
+    border: none;
+    padding: 15px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+.submit-btn:hover { box-shadow: 0 0 15px rgba(102, 252, 241, 0.4); }

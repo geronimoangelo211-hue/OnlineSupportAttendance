@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Online Support Attendance</title>
     <link rel="stylesheet" href="MainCSS.css">
+    <!-- SheetJS for Excel Export -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
+    <!-- Desktop Header -->
     <header id="main-header" class="desktop-header">
         <h2>Support Attendance System</h2>
         <nav>
@@ -16,12 +18,18 @@
         </nav>
     </header>
 
+    <!-- Mobile Header -->
     <header id="mobile-header" class="mobile-header" style="display: none;">
         <h2>Online Support</h2>
         <button onclick="togglePortal()" class="portal-toggle-btn" style="padding: 6px 12px; font-size: 0.7rem;">Admin</button>
     </header>
 
+    <!-- ========================================== -->
+    <!-- 1. STUDENT PORTAL VIEW                     -->
+    <!-- ========================================== -->
     <main id="student-view" class="view active">
+        
+        <!-- Standard Time In / Out Form -->
         <div class="centered-panel" id="turn-in-form">
             <h3>Student Online Support</h3>
             <p>Enter your Student ID to log your attendance.</p>
@@ -44,7 +52,6 @@
             </div>
             <div id="studentCaptchaError">Puzzle failed. Please try again.</div>
 
-
             <div class="action-buttons">
                 <button class="btn-in" onclick="handleTimeIn()">Time In</button>
                 <button class="btn-out" onclick="handleTimeOut()">Time Out</button>
@@ -52,12 +59,14 @@
             <p id="student-message" class="message"></p>
         </div>
 
+        <!-- Locked Screen (Missed Shift / Auto-Closed) -->
         <div class="centered-panel" id="locked-screen" style="display: none;">
             <h3 style="color: var(--error);">Shift Closed</h3>
             <p id="locked-message" style="color: var(--text-muted); margin-top: 10px;"></p>
             <button class="btn-primary" onclick="resetStudentUI()" style="margin-top: 25px;">Acknowledge</button>
         </div>
 
+        <!-- Incognito Mode Warning Screen -->
         <div class="centered-panel" id="incognito-screen" style="display: none; border-color: var(--error);">
             <h3 style="color: var(--error); margin-top: 0; border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 10px;">Private Browsing Detected</h3>
             <p style="color: var(--text-muted); margin-top: 15px;">Please switch to a normal browser window to log your attendance.</p>
@@ -65,13 +74,16 @@
         </div>
     </main>
 
+    <!-- ========================================== -->
+    <!-- 2. ADMIN LOGIN VIEW                        -->
+    <!-- ========================================== -->
     <main id="admin-login-view" class="view">
         <div class="centered-panel">
             <h3>Support Head Login</h3>
             <input type="text" id="admin-user" placeholder="Username">
             <input type="password" id="admin-pass" placeholder="Password">
             
-            <!-- NEW ADMIN CAPTCHA (Hardest) -->
+            <!-- ADMIN CAPTCHA -->
             <div class="captcha-container" style="margin-top: 15px; margin-bottom: 15px;">
                 <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">Security Check (Case Sensitive - Click image to refresh)</p>
                 <canvas id="admin-captcha-canvas" width="250" height="70" style="background: #121419; border: 1px solid #333a45; border-radius: 6px; cursor: pointer; width: 100%;"></canvas>
@@ -83,7 +95,12 @@
         </div>
     </main>
 
+    <!-- ========================================== -->
+    <!-- 3. ADMIN DASHBOARD VIEW                    -->
+    <!-- ========================================== -->
     <main id="admin-dashboard-view" class="view">
+        
+        <!-- Sidebar / Top Navbar -->
         <div class="admin-navbar-container">
             <div class="admin-navbar">
                 <div class="admin-brand">Support Head</div>
@@ -101,6 +118,7 @@
 
         <div class="admin-content-area">
             
+            <!-- SECTION: MAIN DASHBOARD -->
             <div id="sec-dashboard" class="admin-section active">
                 <div style="display: flex; flex-direction: column; gap: 30px; height: 100%; overflow-y: auto; padding-right: 15px;">
                     
@@ -135,10 +153,8 @@
                         </div>
                     </div>
 
-                    <!-- Bottom Complex Panels (Redesigned) -->
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 40px;">
                         
-                        <!-- Left Side: Charts and Best Perf -->
                         <div style="display: flex; flex-direction: column; gap: 30px;">
                             
                             <!-- Charts Row: Pie + Bar -->
@@ -155,7 +171,7 @@
                                     </div>
                                 </div>
 
-                                <!-- NEW: Weekly Bar Chart -->
+                                <!-- Weekly Bar Chart -->
                                 <div class="panel" style="min-height: 300px; padding: 25px;">
                                     <h3 style="margin-top: 0; margin-bottom: 15px; text-align: left;">Students Attendance in a Week</h3>
                                     <div id="dash-bar-chart" style="flex: 1; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding-top: 20px; border-bottom: 1px solid #2d313c; min-height: 150px;">
@@ -182,7 +198,7 @@
                         <!-- Right Side: Dead Students List -->
                         <div class="panel" style="min-height: 400px;">
                             <h3 style="margin-top: 0;">Dead Students Alert</h3>
-                            <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO attendance logs in the last 30 days.</p>
+                            <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO attendance logs in the last 12 days.</p>
                             <div class="list-container" id="dash-dead-students" style="margin-top: 0;"></div>
                         </div>
 
@@ -190,6 +206,7 @@
                 </div>
             </div>
 
+            <!-- SECTION: STUDENTS ATTENDANCE (Live Logs) -->
             <div id="sec-attendance" class="admin-section">
                 <div class="panel" style="background: #16181d; padding: 40px 30px; height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 20px; border-radius: 0; border: none; box-shadow: none;">
                     
@@ -257,6 +274,7 @@
                 </div>
             </div>
 
+            <!-- SECTION: STUDENTS DATA -->
             <div id="sec-data" class="admin-section">
                 <div class="dashboard-grid-layout" style="display: flex; flex-direction: row; gap: 30px; flex: 1; align-items: stretch;">
 
@@ -311,7 +329,6 @@
                     <div class="panel" style="flex: 1.2; display: flex; flex-direction: column; overflow: hidden;">
                         <h3>Students Data</h3>
                         
-                        <!-- Restored correct search bar for the Data Section -->
                         <div style="display: flex; gap: 10px; margin-bottom: 15px; width: 100%; flex-wrap: wrap; flex-shrink: 0; align-items: center;">
                             <input type="text" id="search-student" placeholder="🔍 Search Name or ID..." onkeyup="searchStudents()" style="margin: 0; flex: 1;">
                         </div>
@@ -324,6 +341,7 @@
                 </div>
             </div>
 
+            <!-- SECTION: STUDENTS SCHEDULE -->
             <div id="sec-schedule" class="admin-section">
                 <div class="panel" style="display: flex; flex-direction: column; height: 100%;">
                     <h3 style="margin-top: 0;">Students Schedule Assignment</h3>
@@ -352,7 +370,7 @@
                             <thead>
                                 <tr>
                                     <th>Name</th>
-                                    <th>Tag</th> <!-- NEW TAG COLUMN -->
+                                    <th>Tag</th>
                                     <th>ID Number</th>
                                     <th>Assigned Days</th>
                                 </tr>
@@ -365,6 +383,7 @@
                 </div>
             </div>
 
+            <!-- SECTION: HISTORY -->
             <div id="sec-history" class="admin-section">
                 <div class="panel" style="flex: 1;">
                     <h3>Attendance History (12-Day Auto Delete)</h3>
@@ -399,6 +418,7 @@
                 </div>
             </div>
 
+            <!-- SECTION: SETTINGS -->
             <div id="sec-settings" class="admin-section">
                 <div style="display: flex; gap: 20px; width: 100%; height: 100%; align-items: stretch; justify-content: center;">
                     
@@ -412,6 +432,18 @@
                             <button onclick="createAdminAccount()" class="btn-primary">CREATE ACCOUNT</button>
                         </div>
                         <p id="acc-message" class="message"></p>
+
+                        <!-- REGISTRATION LINK GENERATOR -->
+                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
+
+                        <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Student Self-Registration Link</h4>
+                        <p class="placeholder-text" style="margin-top: 0;">Generate a secure link for students to register themselves. Generating a new link instantly disables the old one.</p>
+                        <button onclick="generateRegistrationLink()" class="btn-primary" style="margin-top: 10px; width: auto;">GENERATE SECURE LINK</button>
+
+                        <div id="reg-link-container" style="display: none; margin-top: 15px; background: #121419; padding: 15px; border-radius: 6px; border: 1px dashed var(--accent);">
+                            <input type="text" id="reg-link-output" readonly style="margin: 0; padding: 10px; font-size: 13px; width: 100%; border: none; background: transparent; color: var(--accent); text-align: center;">
+                            <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY LINK TO CLIPBOARD</button>
+                        </div>
 
                         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
 
@@ -475,6 +507,11 @@
         </div>
     </main>
 
+    <!-- ========================================== -->
+    <!-- 4. MODAL OVERLAYS                          -->
+    <!-- ========================================== -->
+
+    <!-- Performance Modal -->
     <div id="performance-modal" class="modal-overlay" style="display: none;">
         <div class="centered-panel modal-content">
             <h3 id="perf-student-name" style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0;">Student Name</h3>
@@ -496,6 +533,7 @@
         </div>
     </div>
 
+    <!-- Time Out Action Modal -->
     <div id="timeout-modal" class="modal-overlay" style="display: none;">
         <div class="centered-panel modal-content" style="text-align: left;">
             <h3 style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">End of Shift Details</h3>
@@ -550,6 +588,7 @@
         </div>
     </div>
 
+    <!-- Today's Shift Quick View Modal -->
     <div id="today-shift-modal" class="modal-overlay" style="display: none;">
         <div class="centered-panel modal-content" style="text-align: left;">
             <h3 id="ts-name" style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">Today Shift Details</h3>

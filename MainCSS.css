@@ -499,7 +499,6 @@ tr:hover { background: rgba(255,255,255,0.02); }
     cursor: pointer;
     font-size: 12px;
     font-weight: bold;
-    transition: all 0.2s ease;
     padding: 0;
 }
 
@@ -511,7 +510,6 @@ tr:hover { background: rgba(255,255,255,0.02); }
     background: rgba(var(--accent-rgb), 0.15);
     border-color: var(--accent);
     color: var(--accent);
-    box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.3);
 }
 
 .gc-tag {

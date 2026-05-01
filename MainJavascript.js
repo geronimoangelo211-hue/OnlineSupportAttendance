@@ -495,20 +495,26 @@ async function deleteLog(originalIndex) {
     renderDutyToday();
 }
 
-async function deleteHistoryDate(dateStr, event) {
-    event.stopPropagation(); 
+function deleteHistoryDate(dateStr, event) {
+    if (event) event.stopPropagation(); 
+    
     if(confirm(`⚠️ WARNING ⚠️\n\nAre you sure you want to completely delete ALL attendance logs for ${dateStr}?\n\nThis action cannot be undone.`)) {
-        await pullFromCloud();
+        
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         logs = logs.filter(l => l.date !== dateStr);
+        
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        await pushLogsToCloud(); 
+        pushLogsToCloud(); 
         
         renderHistoryView();
         
-        const currentTitle = document.getElementById('history-table-title').textContent;
-        if (currentTitle.includes(dateStr)) {
+        const titleEl = document.getElementById('history-table-title');
+        if (titleEl && titleEl.textContent.includes(dateStr)) {
             document.getElementById('history-table-container').style.display = 'none';
+        }
+        
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderMainDashboard();
         }
     }
 }
@@ -818,9 +824,12 @@ function enforceHistoryLimit() {
     
     uniqueDates.sort((a, b) => new Date(a) - new Date(b));
 
-    if (uniqueDates.length > 30) {
-        const datesToKeep = uniqueDates.slice(-30);
+    // Changed from > 30 to > 12
+    if (uniqueDates.length > 12) {
+        // Keeps only the 12 newest dates, permanently deletes the rest
+        const datesToKeep = uniqueDates.slice(-12);
         logs = logs.filter(l => datesToKeep.includes(l.date));
+        
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
         pushLogsToCloud(); 
     }
@@ -1545,8 +1554,8 @@ function renderMainDashboard() {
             });
         }
 
-        const thirtyDaysAgo = new Date(getPHT());
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const twelveDaysAgo = new Date(getPHT());
+        twelveDaysAgo.setDate(twelveDaysAgo.getDate() - 12); // Changed from - 30 to - 12
         
         const deadStudentsList = document.getElementById('dash-dead-students');
         if (deadStudentsList) {
@@ -1554,12 +1563,13 @@ function renderMainDashboard() {
             let deadCount = 0;
 
             students.forEach(student => {
-                const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= thirtyDaysAgo);
+                const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= twelveDaysAgo);
                 if (!recentLog) {
                     deadCount++;
                     deadStudentsList.innerHTML += `<div style="padding: 10px; border-bottom: 1px solid #2d313c;">${student.name} <span style="color:var(--error); font-size: 10px; float:right;">INACTIVE</span></div>`;
                 }
             });
+            
             if (deadCount === 0) {
                 deadStudentsList.innerHTML = '<p class="placeholder-text">No inactive students.</p>';
             }

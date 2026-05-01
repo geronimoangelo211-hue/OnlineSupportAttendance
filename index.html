@@ -5,12 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Online Support Attendance</title>
     <link rel="stylesheet" href="MainCSS.css">
-    <!-- SheetJS for Excel Export -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
-    <!-- Desktop Header -->
     <header id="main-header" class="desktop-header">
         <h2>Support Attendance System</h2>
         <nav>
@@ -18,18 +16,13 @@
         </nav>
     </header>
 
-    <!-- Mobile Header -->
     <header id="mobile-header" class="mobile-header" style="display: none;">
         <h2>Online Support</h2>
         <button onclick="togglePortal()" class="portal-toggle-btn" style="padding: 6px 12px; font-size: 0.7rem;">Admin</button>
     </header>
 
-    <!-- ========================================== -->
-    <!-- 1. STUDENT PORTAL VIEW                     -->
-    <!-- ========================================== -->
     <main id="student-view" class="view active">
         
-        <!-- Standard Time In / Out Form -->
         <div class="centered-panel" id="turn-in-form">
             <h3>Student Online Support</h3>
             <p>Enter your Student ID to log your attendance.</p>
@@ -422,6 +415,7 @@
             <div id="sec-settings" class="admin-section">
                 <div style="display: flex; gap: 20px; width: 100%; height: 100%; align-items: stretch; justify-content: center;">
                     
+                    <!-- Left Panel: Accounts -->
                     <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
                         <h3>Manage Support Head Accounts</h3>
                         <p class="placeholder-text" style="margin-top: 0;">Create or remove secondary admin accounts.</p>
@@ -433,18 +427,6 @@
                         </div>
                         <p id="acc-message" class="message"></p>
 
-                        <!-- REGISTRATION LINK GENERATOR -->
-                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
-
-                        <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Student Self-Registration Link</h4>
-                        <p class="placeholder-text" style="margin-top: 0;">Generate a secure link for students to register themselves. Generating a new link instantly disables the old one.</p>
-                        <button onclick="generateRegistrationLink()" class="btn-primary" style="margin-top: 10px; width: auto;">GENERATE SECURE LINK</button>
-
-                        <div id="reg-link-container" style="display: none; margin-top: 15px; background: #121419; padding: 15px; border-radius: 6px; border: 1px dashed var(--accent);">
-                            <input type="text" id="reg-link-output" readonly style="margin: 0; padding: 10px; font-size: 13px; width: 100%; border: none; background: transparent; color: var(--accent); text-align: center;">
-                            <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY LINK TO CLIPBOARD</button>
-                        </div>
-
                         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
 
                         <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Existing Accounts</h4>
@@ -453,6 +435,7 @@
                         </div>
                     </div>
 
+                    <!-- Hidden Dev Tools Panel -->
                     <div id="dev-tools-panel" class="panel" style="display: none; flex: 1; border: 1px solid var(--error); flex-direction: column;">
                         <h3 style="color: var(--error);"><span style="color: #f59e0b;">⚠️</span> Developer Testing Tools</h3>
                         <p class="placeholder-text" style="margin-top: 0;">Override system date and time to test attendance logic.</p>
@@ -486,6 +469,7 @@
                         <p id="dev-message" class="message"></p>
                     </div>
 
+                    <!-- Right Panel: UI Appearance & Registration Link -->
                     <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
                         <h3>UI Appearance</h3>
                         <p class="placeholder-text" style="margin-top: 0;">Select a theme below.</p>
@@ -498,6 +482,18 @@
                             <button id="btn-color-pink" class="color-btn" onclick="changeAccentColor('Pink')" style="background: #ec4899; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
                             <button id="btn-color-purple" class="color-btn" onclick="changeAccentColor('Purple')" style="background: #a855f7; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
                             <button id="btn-color-white" class="color-btn" onclick="changeAccentColor('White')" style="background: #ffffff; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                        </div>
+
+                        <!-- REGISTRATION LINK GENERATOR MOVED HERE -->
+                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 30px 0 20px 0;">
+
+                        <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Student Self-Registration Link</h4>
+                        <p class="placeholder-text" style="margin-top: 0;">Generate a secure link for students to register themselves. Generating a new link instantly disables the old one.</p>
+                        <button onclick="generateRegistrationLink()" class="btn-primary" style="margin-top: 10px; width: auto;">GENERATE SECURE LINK</button>
+
+                        <div id="reg-link-container" style="display: none; margin-top: 15px; background: #121419; padding: 15px; border-radius: 6px; border: 1px dashed var(--accent);">
+                            <input type="text" id="reg-link-output" readonly style="margin: 0; padding: 10px; font-size: 13px; width: 100%; border: none; background: transparent; color: var(--accent); text-align: center;">
+                            <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY LINK TO CLIPBOARD</button>
                         </div>
                     </div>
 

@@ -1,4 +1,4 @@
-const API_BASE_URL = "[https://support-backend-xyz.onrender.com/api](https://support-backend-xyz.onrender.com/api)";
+const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 let pendingTimeOutStudent = null;
 let pendingTimeOutAction = null;
 let settingsClickCount = 0; 

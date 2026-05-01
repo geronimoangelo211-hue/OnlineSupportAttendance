@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Support Attendance</title>
+    <link rel="stylesheet" href="MainCSS.css">
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <header id="main-header" class="desktop-header">
+        <h2>Support Attendance System</h2>
+        <nav>
+            <button onclick="togglePortal()" class="portal-toggle-btn">Support Head Portal</button>
+        </nav>
+    </header>
+
+    <header id="mobile-header" class="mobile-header" style="display: none;">
+        <h2>Online Support</h2>
+        <button onclick="togglePortal()" class="portal-toggle-btn" style="padding: 6px 12px; font-size: 0.7rem;">Admin</button>
+    </header>
+
+    <main id="student-view" class="view active">
+        <div class="centered-panel" id="turn-in-form">
+            <h3>Student Online Support</h3>
+            <p>Enter your Student ID to log your attendance.</p>
+
+            <p id="device-lock-msg" style="color: #f59e0b; font-size: 0.85rem; font-weight: bold; display: none; margin-top: 10px; background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 4px; border: 1px solid #f59e0b;"></p>
+            <input type="text" id="student-id-input" placeholder="Enter Student ID Number">
+            
+            <label style="color: var(--text-muted); font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; display: block; text-align: left;">Verify you are human:</label>
+            <div class="slider-captcha-wrapper" id="studentSliderWrapper">
+                <div class="slider-puzzle-container">
+                    <canvas id="studentCaptchaBg"></canvas>
+                    <canvas id="studentCaptchaPiece"></canvas>
+                    <div class="captcha-refresh" id="studentRefreshCaptcha">↻</div>
+                </div>
+                <div class="slider-control" id="studentSliderControl">
+                    <div class="slider-track-text" id="studentSliderTrackText">Slide to complete the puzzle</div>
+                    <div class="slider-fill" id="studentSliderFill"></div>
+                    <div class="slider-thumb" id="studentSliderThumb">➔</div>
+                </div>
+            </div>
+            <div id="studentCaptchaError">Puzzle failed. Please try again.</div>
+
+
+            <div class="action-buttons">
+                <button class="btn-in" onclick="handleTimeIn()">Time In</button>
+                <button class="btn-out" onclick="handleTimeOut()">Time Out</button>
+            </div>
+            <p id="student-message" class="message"></p>
+        </div>
+
+        <div class="centered-panel" id="locked-screen" style="display: none;">
+            <h3 style="color: var(--error);">Shift Closed</h3>
+            <p id="locked-message" style="color: var(--text-muted); margin-top: 10px;"></p>
+            <button class="btn-primary" onclick="resetStudentUI()" style="margin-top: 25px;">Acknowledge</button>
+        </div>
+
+        <div class="centered-panel" id="incognito-screen" style="display: none; border-color: var(--error);">
+            <h3 style="color: var(--error); margin-top: 0; border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 10px;">Private Browsing Detected</h3>
+            <p style="color: var(--text-muted); margin-top: 15px;">Please switch to a normal browser window to log your attendance.</p>
+            <p style="color: #f59e0b; font-size: 0.85rem; font-weight: bold; margin-top: 15px; background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 6px;">Incognito mode is disabled to enforce device security limits.</p>
+        </div>
+    </main>
+
+    <main id="admin-login-view" class="view">
+        <div class="centered-panel">
+            <h3>Support Head Login</h3>
+            <input type="text" id="admin-user" placeholder="Username">
+            <input type="password" id="admin-pass" placeholder="Password">
+            
+            <!-- NEW ADMIN CAPTCHA (Hardest) -->
+            <div class="captcha-container" style="margin-top: 15px; margin-bottom: 15px;">
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">Security Check (Case Sensitive - Click image to refresh)</p>
+                <canvas id="admin-captcha-canvas" width="250" height="70" style="background: #121419; border: 1px solid #333a45; border-radius: 6px; cursor: pointer; width: 100%;"></canvas>
+                <input type="text" id="admin-captcha-input" placeholder="Enter the exact text above" style="margin-top: 10px;">
+            </div>
+
+            <button onclick="loginAdmin()" class="btn-primary">Login</button>
+            <p id="login-message" class="message error"></p>
+        </div>
+    </main>
+
+    <main id="admin-dashboard-view" class="view">
+        <div class="admin-navbar-container">
+            <div class="admin-navbar">
+                <div class="admin-brand">Support Head</div>
+                <div class="admin-nav-links">
+                    <div class="admin-nav-item active" onclick="switchAdminSection('sec-dashboard', this)">Dashboard</div>
+                    <div class="admin-nav-item" onclick="switchAdminSection('sec-attendance', this)">Students Attendance</div>
+                    <div class="admin-nav-item" onclick="switchAdminSection('sec-data', this)">Students Data</div>
+                    <div class="admin-nav-item" onclick="switchAdminSection('sec-schedule', this)">Students Schedule</div>
+                    <div class="admin-nav-item" onclick="switchAdminSection('sec-history', this)">History</div>
+                    <div class="admin-nav-item" onclick="switchAdminSection('sec-settings', this)">Settings</div>
+                    <div class="admin-nav-item logout-btn" onclick="logoutAdmin()">Logout</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-content-area">
+            
+            <div id="sec-dashboard" class="admin-section active">
+                <div style="display: flex; flex-direction: column; gap: 30px; height: 100%; overflow-y: auto; padding-right: 15px;">
+                    
+                    <h2 style="margin: 0; color: var(--text-main);">Today's Analytics</h2>
+
+                    <!-- Top Metrics Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                        <div class="dash-card">
+                            <h4>Students Scheduled Today</h4>
+                            <h2 id="dash-ratio">0 / 0</h2>
+                            <p class="placeholder-text" style="font-size: 11px; margin-top: 5px;">Attended / Expected</p>
+                        </div>
+                        <div class="dash-card">
+                            <h4>Attendance Rate</h4>
+                            <h2 id="dash-rate" style="color: var(--accent);">0%</h2>
+                        </div>
+                        <div class="dash-card">
+                            <h4>Total Registered Students</h4>
+                            <h2 id="dash-total">0</h2>
+                        </div>
+                        <div class="dash-card">
+                            <h4>Present Today</h4>
+                            <h2 id="dash-present" style="color: var(--success);">0</h2>
+                        </div>
+                        <div class="dash-card">
+                            <h4>Absent Today</h4>
+                            <h2 id="dash-absent" style="color: var(--error);">0</h2>
+                        </div>
+                        <div class="dash-card">
+                            <h4>Late Arrivals</h4>
+                            <h2 id="dash-late" style="color: #f59e0b;">0</h2>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Complex Panels (Redesigned) -->
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 40px;">
+                        
+                        <!-- Left Side: Charts and Best Perf -->
+                        <div style="display: flex; flex-direction: column; gap: 30px;">
+                            
+                            <!-- Charts Row: Pie + Bar -->
+                            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
+                                <!-- Pie Chart -->
+                                <div class="panel" style="min-height: 300px; padding: 25px;">
+                                    <h3 style="margin-top: 0; margin-bottom: 0; text-align: left;">Attendance Breakdown</h3>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 15px;">
+                                        <div id="dash-pie-chart" class="pie-chart"></div>
+                                        <div style="display: flex; gap: 15px; margin-top: 25px; font-weight: bold; font-size: 13px;">
+                                            <span style="color: var(--success);"><span style="display:inline-block; width:12px; height:12px; background:var(--success); border-radius:50%; margin-right:5px;"></span>Present</span>
+                                            <span style="color: var(--error);"><span style="display:inline-block; width:12px; height:12px; background:var(--error); border-radius:50%; margin-right:5px;"></span>Absent</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- NEW: Weekly Bar Chart -->
+                                <div class="panel" style="min-height: 300px; padding: 25px;">
+                                    <h3 style="margin-top: 0; margin-bottom: 15px; text-align: left;">Students Attendance in a Week</h3>
+                                    <div id="dash-bar-chart" style="flex: 1; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding-top: 20px; border-bottom: 1px solid #2d313c; min-height: 150px;">
+                                        <!-- Bars inject here -->
+                                    </div>
+                                    <div id="dash-bar-labels" style="display: flex; justify-content: space-around; margin-top: 10px; color: var(--text-muted); font-size: 11px;">
+                                        <!-- Labels inject here -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Best Performance Row -->
+                            <div class="panel" style="flex-direction: row; align-items: center; justify-content: space-between; min-height: 120px;">
+                                <div>
+                                    <h3 style="border: none; margin: 0; padding: 0;">Best Performance</h3>
+                                    <p class="placeholder-text" style="margin-top: 5px;">Highest overall accuracy rate.</p>
+                                </div>
+                                <div id="dash-best-perf" style="font-size: 1.8rem; color: var(--accent); font-weight: bold; text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.3);">
+                                    TBD
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Side: Dead Students List -->
+                        <div class="panel" style="min-height: 400px;">
+                            <h3 style="margin-top: 0;">Dead Students Alert</h3>
+                            <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO attendance logs in the last 30 days.</p>
+                            <div class="list-container" id="dash-dead-students" style="margin-top: 0;"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div id="sec-attendance" class="admin-section">
+                <div class="panel" style="background: #16181d; padding: 40px 30px; height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 20px; border-radius: 0; border: none; box-shadow: none;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0; padding: 0;">
+                        <div style="width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 20px;">
+                            <div>
+                                <h1 style="margin: 0; color: var(--accent); white-space: nowrap;">Live Attendance</h1>
+                                <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 13px; white-space: nowrap;">Monitor today's scheduled students and real-time logs.</p>
+                            </div>
+                            <input type="text" id="search-attendance-global" placeholder="Search logs by Name or ID..." onkeyup="handleGlobalSearch()" style="margin: 0; width: 100%; max-width: 350px; padding: 10px 15px; font-size: 14px;">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 20px; flex: 1 1 0; min-height: 0; overflow: hidden; padding: 0;">
+
+                        <div style="flex: 2; display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 15px; min-height: 0; min-width: 0;">
+                            <div class="sr-tabs-container">
+                                <div style="display: flex; gap: 4px;">
+                                    <button id="tab-btn-summary" class="sr-tab-btn active" onclick="switchAttendanceTab('summary')">TOTAL ATTENDANCE SUMMARY</button>
+                                    <button id="tab-btn-logs" class="sr-tab-btn" onclick="switchAttendanceTab('logs')">TODAY's ATTENDANCE LOGS</button>
+                                </div>
+                            </div>
+
+                            <div id="att-pane-summary" style="display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%;">
+                                <div class="list-container" style="margin-top: 0; flex: 1; overflow: auto;">
+                                    <table style="width: 100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>ID Number</th>
+                                                <th>Reports</th> 
+                                            </tr>
+                                        </thead>
+                                        <tbody id="summary-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div id="att-pane-logs" style="display: none; flex-direction: column; flex: 1; min-height: 0; width: 100%;">
+                                <div class="list-container" style="margin-top: 0; flex: 1; overflow: auto;">
+                                    <table id="attendance-table" style="width: 100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>ID Number</th>
+                                                <th>Action</th>
+                                                <th>Time</th>
+                                                <th>Manage</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="attendance-logs-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="flex: 1; display: flex; flex-direction: column; min-width: 250px;">
+                            <h3 style="margin-top: 0; color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; font-size: 16px;">List of Online Supports Duty Today</h3>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Expected staff based on current schedule.</p>
+                            <div class="duty-list-container" id="duty-today-list" style="flex: 1; max-height: none;">
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div id="sec-data" class="admin-section">
+                <div class="dashboard-grid-layout" style="display: flex; flex-direction: row; gap: 30px; flex: 1; align-items: stretch;">
+
+                    <div class="panel" style="flex: 0.8; display: flex; flex-direction: column; gap: 35px; overflow-y: auto;">
+                        
+                        <div>
+                            <h3>Create Student Support</h3>
+                            <div class="form-group">
+                                <input type="text" id="new-student-name" placeholder="Student Name">
+                                <input type="text" id="new-student-id" placeholder="Student ID Number">
+                                <select id="new-student-gc">
+                                    <option value="">-- Assign GC Handle --</option>
+                                    <option value="BSA">BSA</option>
+                                    <option value="BSIT">BSIT</option>
+                                    <option value="BSED ENG">BSED ENG</option>
+                                    <option value="BSPT">BSPT</option>
+                                    <option value="BSHM">BSHM</option>
+                                    <option value="BSTM">BSTM</option>
+                                    <option value="BSCRIM">BSCRIM</option>
+                                    <option value="BSPHARMA">BSPHARMA</option>
+                                    <option value="BSRESPI">BSRESPI</option>
+                                    <option value="BSED FIL">BSED FIL</option>
+                                    <option value="BSN">BSN</option>
+                                    <option value="BSPSYCH">BSPSYCH</option>
+                                    <option value="RAD">RAD</option>
+                                    <option value="BSRADTECH">BSRADTECH</option>
+                                    <option value="BEED">BEED</option>
+                                    <option value="BSBA-FM">BSBA-FM</option>
+                                    <option value="BSBA-MM">BSBA-MM</option>
+                                    <option value="BSMT">BSMT</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <button onclick="createStudent()" class="btn-primary">ADD STUDENT</button>
+                            </div>
+                            <p id="admin-message" class="message"></p>
+                        </div>
+
+                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 0;">
+
+                        <div>
+                            <h3>Edit Online Support GroupChat Handle</h3>
+                            <div class="form-group">
+                                <input type="text" id="edit-student-id" placeholder="Enter Student ID">
+                                <input type="text" id="edit-student-gc" placeholder="Enter Custom Tag Name (e.g. BSIT)">
+                                <button onclick="updateStudentGC()" class="btn-primary">UPDATE GC HANDLE</button>
+                            </div>
+                            <p id="edit-gc-message" class="message"></p>
+                        </div>
+                        
+                    </div>
+
+                    <div class="panel" style="flex: 1.2; display: flex; flex-direction: column; overflow: hidden;">
+                        <h3>Students Data</h3>
+                        
+                        <!-- Restored correct search bar for the Data Section -->
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px; width: 100%; flex-wrap: wrap; flex-shrink: 0; align-items: center;">
+                            <input type="text" id="search-student" placeholder="🔍 Search Name or ID..." onkeyup="searchStudents()" style="margin: 0; flex: 1;">
+                        </div>
+                        
+                        <div class="list-container" style="margin-top: 0; flex: 1; overflow-y: auto;">
+                            <ul id="registered-students-list"></ul>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div id="sec-schedule" class="admin-section">
+                <div class="panel" style="display: flex; flex-direction: column; height: 100%;">
+                    <h3 style="margin-top: 0;">Students Schedule Assignment</h3>
+                    <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Assign shift days for each registered student. Students cannot log in on unassigned days.</p>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; width: 100%; flex-wrap: wrap; flex-shrink: 0; align-items: center;">
+                        <input type="text" id="search-schedule" placeholder="🔍 Search Name, ID, or Tag..." onkeyup="renderSchedule()" style="margin: 0; flex: 1; min-width: 150px;">
+                        
+                        <select id="filter-schedule" onchange="renderSchedule()" style="margin: 0; width: auto; font-size: 13px;">
+                            <option value="ALL">Show All</option>
+                            <option value="UNASSIGNED">Unassigned Schedule Only</option>
+                            <option value="ASSIGNED">Assigned Schedule Only</option>
+                        </select>
+
+                        <select id="sort-schedule" onchange="renderSchedule()" style="margin: 0; width: auto; font-size: 13px;">
+                            <option value="NAME_ASC">Sort: Name (A-Z)</option>
+                            <option value="NAME_DESC">Sort: Name (Z-A)</option>
+                            <option value="ID_ASC">Sort: ID (Lowest)</option>
+                            <option value="ID_DESC">Sort: ID (Highest)</option>
+                            <option value="TAG_ASC">Sort: Tag (A-Z)</option>
+                        </select>
+                    </div>
+
+                    <div class="list-container" style="flex: 1; overflow-y: auto;">
+                        <table id="schedule-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Tag</th> <!-- NEW TAG COLUMN -->
+                                    <th>ID Number</th>
+                                    <th>Assigned Days</th>
+                                </tr>
+                            </thead>
+                            <tbody id="schedule-logs-body">
+                            </tbody>
+                        </table>
+                    </div>
+                    <p id="schedule-message" class="message"></p>
+                </div>
+            </div>
+
+            <div id="sec-history" class="admin-section">
+                <div class="panel" style="flex: 1;">
+                    <h3>Attendance History (30-Day Auto Archive)</h3>
+                    <p class="placeholder-text" style="margin-top: 0;">Select a date card below to view past attendance logs. Records older than 30 days are automatically removed from the database.</p>
+                    
+                    <div id="history-cards-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px; margin-bottom: 25px;">
+                    </div>
+
+                    <div id="history-table-container" style="display: none; flex-direction: column; flex: 1; min-height: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 15px;">
+                            <h4 id="history-table-title" style="color: var(--accent); margin: 0; font-size: 1.1rem;">Logs</h4>
+                            <button id="history-export-btn" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); border: 1px solid var(--accent); padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Export Excel</button>
+                        </div>
+                        <div class="list-container" style="margin-top: 0;">
+                            <table id="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>ID Number</th>
+                                        <th>Time In</th>
+                                        <th>Time Out</th>
+                                        <th>GC Handle</th>
+                                        <th>Announcement</th>
+                                        <th>Posted By</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-logs-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="sec-settings" class="admin-section">
+                <div style="display: flex; gap: 20px; width: 100%; height: 100%; align-items: stretch; justify-content: center;">
+                    
+                    <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
+                        <h3>Manage Support Head Accounts</h3>
+                        <p class="placeholder-text" style="margin-top: 0;">Create or remove secondary admin accounts.</p>
+                        
+                        <div class="form-group" style="margin-top: 15px;">
+                            <input type="text" id="new-admin-user" placeholder="New Username">
+                            <input type="password" id="new-admin-pass" placeholder="New Password">
+                            <button onclick="createAdminAccount()" class="btn-primary">CREATE ACCOUNT</button>
+                        </div>
+                        <p id="acc-message" class="message"></p>
+
+                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 20px 0;">
+
+                        <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Existing Accounts</h4>
+                        <div class="list-container" style="flex: 1; overflow-y: auto;">
+                            <ul id="admin-accounts-list" style="margin: 0; padding: 0; list-style: none;"></ul>
+                        </div>
+                    </div>
+
+                    <div id="dev-tools-panel" class="panel" style="display: none; flex: 1; border: 1px solid var(--error); flex-direction: column;">
+                        <h3 style="color: var(--error);"><span style="color: #f59e0b;">⚠️</span> Developer Testing Tools</h3>
+                        <p class="placeholder-text" style="margin-top: 0;">Override system date and time to test attendance logic.</p>
+
+                        <div class="form-group" style="margin-top: 20px; flex: 1; display: flex; flex-direction: column;">
+                            <label style="color: var(--text-main); font-size: 0.85rem; font-weight: bold;">Simulate Date:</label>
+                            <input type="date" id="dev-date" style="margin-bottom: 10px;">
+
+                            <label style="color: var(--text-main); font-size: 0.85rem; font-weight: bold;">Simulate Time:</label>
+                            <input type="time" id="dev-time" style="margin-bottom: 10px;">
+
+                            <label style="color: var(--text-main); font-size: 0.85rem; font-weight: bold;">Simulate Day:</label>
+                            <select id="dev-day" style="margin-bottom: 20px;">
+                                <option value="">-- Use Real Day --</option>
+                                <option value="Monday">Monday</option>
+                                <option value="Tuesday">Tuesday</option>
+                                <option value="Wednesday">Wednesday</option>
+                                <option value="Thursday">Thursday</option>
+                                <option value="Friday">Friday</option>
+                                <option value="Saturday">Saturday</option>
+                                <option value="Sunday">Sunday</option>
+                            </select>
+
+                            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                <button onclick="applyDevSettings()" class="btn-primary" style="flex: 1; margin: 0; font-size: 11px;">Apply Travel</button>
+                                <button onclick="resetDevSettings()" class="btn-out" style="flex: 1; margin: 0; background: transparent; border: 1px solid var(--error); color: var(--error); font-size: 11px;">Reset Reality</button>
+                            </div>
+                            <button onclick="devClearLogs()" style="width: 100%; background: #f59e0b; color: #000; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 10px;">Clear All Logs</button>
+                            <button onclick="factoryReset()" style="width: 100%; background: var(--error); color: #fff; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer;">FACTORY RESET WIPE</button>
+                        </div>
+                        <p id="dev-message" class="message"></p>
+                    </div>
+
+                    <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
+                        <h3>UI Appearance</h3>
+                        <p class="placeholder-text" style="margin-top: 0;">Select a theme below.</p>
+                        
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px;">
+                            <button id="btn-color-red" class="color-btn" onclick="changeAccentColor('Red')" style="background: #ef4444; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                            <button id="btn-color-yellow" class="color-btn" onclick="changeAccentColor('Yellow')" style="background: #f59e0b; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                            <button id="btn-color-green" class="color-btn" onclick="changeAccentColor('Green')" style="background: #22c55e; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                            <button id="btn-color-blue" class="color-btn" onclick="changeAccentColor('Blue')" style="background: #66fcf1; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                            <button id="btn-color-pink" class="color-btn" onclick="changeAccentColor('Pink')" style="background: #ec4899; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                            <button id="btn-color-purple" class="color-btn" onclick="changeAccentColor('Purple')" style="background: #a855f7; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                            <button id="btn-color-white" class="color-btn" onclick="changeAccentColor('White')" style="background: #ffffff; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <div id="performance-modal" class="modal-overlay" style="display: none;">
+        <div class="centered-panel modal-content">
+            <h3 id="perf-student-name" style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0;">Student Name</h3>
+            
+            <div class="perf-stats">
+                <p>Total Present: <strong id="perf-total-present">0</strong></p>
+                <p>On Time (In): <strong id="perf-on-time" style="color: var(--success);">0</strong></p>
+                <p>Late (In): <strong id="perf-late-in" style="color: #f59e0b;">0</strong></p>
+                <p>On Time (Out): <strong id="perf-out-time" style="color: var(--success);">0</strong></p>
+                <p>Late (Out): <strong id="perf-late-out" style="color: #f59e0b;">0</strong></p>
+                
+                <div class="perf-rate-box">
+                    <h4>Overall Performance Rate</h4>
+                    <h2 id="perf-rate">0%</h2>
+                </div>
+            </div>
+            
+            <button class="btn-primary" onclick="closePerformanceModal()" style="margin-top: 20px;">Close Report</button>
+        </div>
+    </div>
+
+    <div id="timeout-modal" class="modal-overlay" style="display: none;">
+        <div class="centered-panel modal-content" style="text-align: left;">
+            <h3 style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">End of Shift Details</h3>
+
+            <div class="form-group" style="margin-top: 15px;">
+                <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold;">GroupChat Handle?</label>
+                <select id="gc-handle" onchange="toggleOtherGC(this.value)" style="margin-top: 5px;">
+                    <option value="">-- Select GC Handle --</option>
+                    <option value="BSA">BSA</option>
+                    <option value="BSIT">BSIT</option>
+                    <option value="BSED ENG">BSED ENG</option>
+                    <option value="BSPT">BSPT</option>
+                    <option value="BSHM">BSHM</option>
+                    <option value="BSTM">BSTM</option>
+                    <option value="BSCRIM">BSCRIM</option>
+                    <option value="BSPHARMA">BSPHARMA</option>
+                    <option value="BSRESPI">BSRESPI</option>
+                    <option value="BSED FIL">BSED FIL</option>
+                    <option value="BSN">BSN</option>
+                    <option value="BSPSYCH">BSPSYCH</option>
+                    <option value="RAD">RAD</option>
+                    <option value="BSRADTECH">BSRADTECH</option>
+                    <option value="BEED">BEED</option>
+                    <option value="BSBA-FM">BSBA-FM</option>
+                    <option value="BSBA-MM">BSBA-MM</option>
+                    <option value="BSMT">BSMT</option>
+                    <option value="Other">Other:</option>
+                </select>
+                
+                <input type="text" id="gc-handle-other" placeholder="Please specify your GC Handle" style="display: none; margin-top: 10px;">
+
+                <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 15px; display: block;">Was there an announcement/question?</label>
+                <div class="radio-group" style="display: flex; gap: 20px; margin-top: 5px;">
+                    <label><input type="radio" name="announcement" value="Yes"> Yes</label>
+                    <label><input type="radio" name="announcement" value="No"> No</label>
+                </div>
+
+                <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 15px; display: block;">Who posted the announcement/answered?</label>
+                <div class="radio-group" style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px;">
+                    <label><input type="radio" name="who-posted" value="Me"> Me</label>
+                    <label><input type="radio" name="who-posted" value="TL/ATL"> TL/ATL</label>
+                    <label><input type="radio" name="who-posted" value="No Cascade/Pending Questions Today"> No Cascade/Pending Questions Today</label>
+                    <label><input type="radio" name="who-posted" value="Co-Online Support"> Co-Online Support</label>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 25px;">
+                <button class="btn-out" onclick="cancelTimeOut()" style="flex: 1; background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted);">Cancel</button>
+                <button class="btn-primary" onclick="finalizeTimeOut()" style="flex: 1; margin-top: 0;">Submit & Time Out</button>
+            </div>
+            <p id="timeout-modal-message" class="message error" style="text-align: center;"></p>
+        </div>
+    </div>
+
+    <div id="today-shift-modal" class="modal-overlay" style="display: none;">
+        <div class="centered-panel modal-content" style="text-align: left;">
+            <h3 id="ts-name" style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">Today Shift Details</h3>
+            
+            <div class="perf-stats" style="margin-top: 15px;">
+                <p>Time In: <strong id="ts-time-in">--</strong></p>
+                <p>Time Out: <strong id="ts-time-out">--</strong></p>
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 15px; padding-top: 15px;">
+                    <p>GC Handle: <strong id="ts-gc" style="color: var(--text-main);">--</strong></p>
+                    <p>Announcement: <strong id="ts-announce" style="color: var(--text-main);">--</strong></p>
+                    <p>Posted By: <strong id="ts-posted" style="color: var(--text-main);">--</strong></p>
+                </div>
+            </div>
+            
+            <button class="btn-primary" onclick="closeTodayShiftModal()" style="margin-top: 20px;">Close Details</button>
+        </div>
+    </div>
+
+    <script src="MainJavascript.js"></script>
+</body>
+</html>

@@ -17,7 +17,7 @@
 
         <form onsubmit="submitRegistration(event)">
             <input type="text" id="reg-name" placeholder="ALL CAPS - SURNAME, FIRST NAME, MIDDLE NAME" required>
-            <input type="text" id="reg-id" placeholder="Student ID Number" required>
+            <input type="text" id="reg-id" placeholder="Student ID Number - 73-4321-123456 example" required>
             
             <select id="reg-gc" onchange="toggleOtherGC(this.value)" required>
                 <option value="">-- Select Group Chat Handle --</option>
@@ -31,7 +31,7 @@
             </select>
             <input type="text" id="reg-gc-other" placeholder="Specify Handle" style="display: none; margin-top: 5px;">
 
-            <label class="schedule-label">Select Your Assigned Days:</label>
+            <label class="schedule-label">Your Assigned Days:</label>
             <div class="days-grid">
                 <label class="day-checkbox"><input type="checkbox" name="schedule" value="Monday"> Monday</label>
                 <label class="day-checkbox"><input type="checkbox" name="schedule" value="Tuesday"> Tuesday</label>

@@ -1,13 +1,7 @@
-// ==========================================
-// 1. LIVE RENDER BACKEND URL & CLOUD SYNC
-// ==========================================
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 
-// CLOUD PULL: Gets data from Render and updates LocalStorage intelligently
 async function pullFromCloud() {
     try {
-        // --- SYNC STUDENTS ---
-        // ADDED 'no-store' so mobile phones never use outdated cached data!
         const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
         if (stuRes.ok) {
             const cloudStudents = await stuRes.json();
@@ -20,7 +14,6 @@ async function pullFromCloud() {
             }
         }
         
-        // --- SYNC LOGS ---
         const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
         if (logRes.ok) {
             const cloudLogs = await logRes.json();
@@ -37,7 +30,6 @@ async function pullFromCloud() {
     }
 }
 
-// CLOUD PUSH: Sends LocalStorage arrays to Render
 async function pushStudentsToCloud() {
     const data = JSON.parse(localStorage.getItem('students')) || [];
     try {
@@ -427,9 +419,8 @@ async function deleteStudent(idNum) {
 }
 
 async function toggleStudentDay(id, day) {
-    // PRE-SYNC: Prevent overwriting schedules done on other devices
-    await pullFromCloud();
-
+    // REMOVED pullFromCloud() here to prevent rapid-click race conditions!
+    
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => s.id === id);
     
@@ -442,9 +433,10 @@ async function toggleStudentDay(id, day) {
             student.assignedDays.push(day);
         }
         
+        // Save locally instantly
         localStorage.setItem('students', JSON.stringify(students));
-        await pushStudentsToCloud(); 
         
+        // Update UI instantly without waiting for the server
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderSchedule();
             renderMainDashboard();
@@ -452,12 +444,12 @@ async function toggleStudentDay(id, day) {
             renderLogs();
             renderDutyToday();
         }
+
+        // Push to cloud silently in the background
+        pushStudentsToCloud(); 
     }
 }
 
-// ==========================================
-// 6. ATTENDANCE LOGGING & SYNCING
-// ==========================================
 async function logAttendanceAction(student, action, endOfShiftDetails = null) {
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];

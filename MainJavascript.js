@@ -56,6 +56,9 @@ let pendingTimeOutStudent = null;
 let pendingTimeOutAction = null;
 let pendingTimeOutDate = null;
 let settingsClickCount = 0; 
+let pendingExemptId = null;
+let pendingExemptDate = null;
+let pendingExemptCheckbox = null;
 
 function getShiftDateDetails() {
     const pht = getPHT();
@@ -336,7 +339,7 @@ async function generateRegistrationLink() {
         const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
         const data = await response.json();
         
-        const link = `${window.location.origin}/register.html?token=${data.token}`;
+        const link = `${window.location.origin}/OSREGISTER?token=${data.token}`;
         
         document.getElementById('reg-link-container').style.display = 'block';
         document.getElementById('reg-link-output').value = link;
@@ -628,28 +631,77 @@ function deleteHistoryDate(dateStr, event) {
     }
 }
 
-async function toggleExempt(idNum, dateStr, isChecked) {
+function toggleExempt(idNum, dateStr, checkbox) {
+    if (checkbox.checked) {
+        pendingExemptId = idNum;
+        pendingExemptDate = dateStr;
+        pendingExemptCheckbox = checkbox;
+        document.getElementById('exempt-modal').style.display = 'flex';
+    } else {
+        removeExemptions(idNum, dateStr);
+    }
+}
+
+function closeExemptModal() {
+    document.getElementById('exempt-modal').style.display = 'none';
+    if (pendingExemptCheckbox) {
+        pendingExemptCheckbox.checked = false;
+    }
+    pendingExemptId = null;
+    pendingExemptDate = null;
+    pendingExemptCheckbox = null;
+}
+
+async function applyExempt(type) {
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const s = students.find(x => x.id === pendingExemptId);
     
-    if (isChecked) {
-        logs = logs.filter(l => !(l.id === idNum && l.date === dateStr));
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-        const s = students.find(x => x.id === idNum);
-        if (s) {
+    if (s) {
+        logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && (l.action.includes('Exempted') || l.action === 'No Attendance')));
+
+        if (type === 'IN' || type === 'BOTH') {
+            logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('In')));
             logs.push({
                 name: s.name,
                 id: s.id,
-                action: 'Exempted',
+                action: 'Time In (Exempted)',
                 time: 'Exempted',
-                date: dateStr,
+                date: pendingExemptDate,
+                details: null
+            });
+        }
+        
+        if (type === 'OUT' || type === 'BOTH') {
+            logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('Out')));
+            logs.push({
+                name: s.name,
+                id: s.id,
+                action: 'Time Out (Exempted)',
+                time: 'Exempted',
+                date: pendingExemptDate,
                 details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
             });
         }
-    } else {
-        logs = logs.filter(l => !(l.id === idNum && l.date === dateStr && l.action === 'Exempted'));
+
+        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+        await pushLogsToCloud();
+        
+        renderHistoryTable(pendingExemptDate);
+        renderMainDashboard();
     }
     
+    document.getElementById('exempt-modal').style.display = 'none';
+    pendingExemptId = null;
+    pendingExemptDate = null;
+    pendingExemptCheckbox = null;
+}
+
+async function removeExemptions(idNum, dateStr) {
+    await pullFromCloud();
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    logs = logs.filter(l => !(l.id === idNum && l.date === dateStr && l.action.includes('Exempted')));
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     await pushLogsToCloud();
     
@@ -719,7 +771,7 @@ async function handleTimeIn() {
         }
 
         const todayLogs = getTodayLogs(idNum);
-        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance' || l.action === 'Exempted')) {
+        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance')) {
             showMessage('student-message', 'You already have an attendance record for today.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
@@ -800,7 +852,7 @@ async function handleTimeOut() {
 
         const todayLogs = getTodayLogs(idNum);
         
-        if (todayLogs.some(l => l.action === 'Exempted')) {
+        if (todayLogs.some(l => l.action === 'Time Out (Exempted)')) {
             showMessage('student-message', 'You are marked as Exempted for this shift.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
@@ -955,7 +1007,7 @@ function checkAndApplyAutoTimeOut() {
             studentIds.forEach(id => {
                 const sLogs = dayLogs.filter(l => l.id === id);
                 const hasTimeIn = sLogs.some(l => l.action.includes('Time In'));
-                const hasTimeOut = sLogs.some(l => l.action.includes('Time Out') || l.action === 'Exempted');
+                const hasTimeOut = sLogs.some(l => l.action.includes('Time Out') || l.action.includes('Exempted'));
 
                 if (hasTimeIn && !hasTimeOut) {
                     const studentName = sLogs[0].name;
@@ -1192,10 +1244,10 @@ function renderLogs() {
         else if (log.action.includes('In')) statusColor = 'var(--success)';
         else if (log.action.includes('Out')) statusColor = 'var(--error)';
         else if (log.action === 'No Attendance') statusColor = '#6b7280';
-        else if (log.action === 'Exempted') statusColor = '#66fcf1';
+        else if (log.action.includes('Exempted')) statusColor = '#66fcf1';
 
         let todayShiftBtn = '';
-        if ((log.action.includes('Out') || log.action === 'Exempted') && log.details) {
+        if ((log.action.includes('Out') || log.action.includes('Exempted')) && log.details) {
             todayShiftBtn = `<button onclick="viewTodayShift('${log.id}', '${log.date}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 5px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; border: 1px solid var(--accent); margin-right: 8px; cursor: pointer;">TODAY SHIFT</button>`;
         }
 
@@ -1237,7 +1289,7 @@ function renderDutyToday() {
 
     scheduledToday.forEach(student => {
         const hasTimedIn = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('In'));
-        const hasTimedOut = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action === 'Exempted'));
+        const hasTimedOut = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
 
         let statusDot = '#f59e0b'; 
         if (hasTimedOut) {
@@ -1283,7 +1335,6 @@ function exportToExcel(dateStr = null) {
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
         let inText = '--';
         let outText = '--';
@@ -1291,23 +1342,23 @@ function exportToExcel(dateStr = null) {
         let ann = '';
         let post = '';
 
-        if (exemptLog) {
-            inText = 'Exempted';
-            outText = 'Exempted';
+        if (timeInLog) {
+            if (timeInLog.action.includes('Exempted')) inText = 'Exempted';
+            else inText = `${timeInLog.time} (${timeInLog.action.includes('Late') ? 'Late' : 'On Time'})`;
         } else if (noAttLog) {
             inText = 'No Attendance';
+        }
+
+        if (timeOutLog) {
+            if (timeOutLog.action.includes('Exempted')) outText = 'Exempted';
+            else outText = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'Late' : 'On Time'})`;
+            
+            const details = timeOutLog.details || {};
+            gc = details.gcHandle || '';
+            ann = details.announcement || '';
+            post = details.whoPosted || '';
+        } else if (noAttLog) {
             outText = 'No Attendance';
-        } else {
-            if (timeInLog) {
-                inText = `${timeInLog.time} (${timeInLog.action.includes('Late') ? 'Late' : 'On Time'})`;
-            }
-            if (timeOutLog) {
-                outText = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'Late' : 'On Time'})`;
-                const details = timeOutLog.details || {};
-                gc = details.gcHandle || '';
-                ann = details.announcement || '';
-                post = details.whoPosted || '';
-            }
         }
 
         data.push([name, id, inText, outText, targetDate, gc, ann, post]);
@@ -1535,7 +1586,6 @@ function renderHistoryTable(dateStr) {
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
         let inText = '--';
         let outText = '--';
@@ -1543,29 +1593,33 @@ function renderHistoryTable(dateStr) {
         let ann = '-';
         let post = '-';
 
-        if (exemptLog) {
-            inText = '<span style="color: #66fcf1;">Exempted</span>';
-            outText = '<span style="color: #66fcf1;">Exempted</span>';
-        } else if (noAttLog) {
-            inText = '<span style="color: var(--error);">No Attendance</span>';
-            outText = '<span style="color: var(--error);">No Attendance</span>';
-        } else {
-            if (timeInLog) {
+        if (timeInLog) {
+            if (timeInLog.action.includes('Exempted')) {
+                inText = '<span style="color: #66fcf1;">Exempted</span>';
+            } else {
                 const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
                 inText = `<span style="color: ${color};">${timeInLog.time}</span>`;
             }
-            if (timeOutLog) {
+        } else if (noAttLog) {
+            inText = '<span style="color: var(--error);">No Attendance</span>';
+        }
+
+        if (timeOutLog) {
+            if (timeOutLog.action.includes('Exempted')) {
+                outText = '<span style="color: #66fcf1;">Exempted</span>';
+            } else {
                 const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
                 outText = `<span style="color: ${color};">${timeOutLog.time}</span>`;
-
                 const details = timeOutLog.details || {};
                 gc = details.gcHandle || '-';
                 ann = details.announcement || '-';
                 post = details.whoPosted || '-';
             }
+        } else if (noAttLog) {
+            outText = '<span style="color: var(--error);">No Attendance</span>';
         }
 
-        const isExempted = studentLogs.some(l => l.action === 'Exempted');
+        const isExempted = studentLogs.some(l => l.action.includes('Exempted'));
         const checkedAttr = isExempted ? 'checked' : '';
 
         const tr = document.createElement('tr');
@@ -1577,7 +1631,7 @@ function renderHistoryTable(dateStr) {
             <td style="color: var(--text-muted);">${gc}</td>
             <td style="color: var(--text-muted);">${ann}</td>
             <td style="color: var(--text-muted);">${post}</td>
-            <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this.checked)" ${checkedAttr}></td>
+            <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this)" ${checkedAttr}></td>
         `;
         tbody.appendChild(tr);
     });

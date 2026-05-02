@@ -1583,7 +1583,15 @@ function renderHistoryView() {
     
     uniqueDates.sort((a, b) => new Date(b) - new Date(a)); 
 
-    const displayDates = uniqueDates.slice(0, 12);
+    let displayDates = uniqueDates.slice(0, 12);
+
+    // NEW: Filter dates by the search bar
+    const searchInput = document.getElementById('search-history-date');
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
+
+    if (query) {
+        displayDates = displayDates.filter(d => d.toLowerCase().includes(query));
+    }
 
     const container = document.getElementById('history-cards-container');
     if(!container) return;
@@ -1617,7 +1625,9 @@ function renderHistoryTable(dateStr) {
     document.getElementById('history-table-container').style.display = 'flex';
     document.getElementById('history-table-title').textContent = `Logs for ${dateStr}`;
     
+    // Connect the buttons to the current date
     document.getElementById('history-export-btn').onclick = () => exportToExcel(dateStr);
+    document.getElementById('history-exempt-all-btn').onclick = () => exemptAllForDate(dateStr);
     
     const tbody = document.getElementById('history-logs-body');
     tbody.innerHTML = '';
@@ -1676,11 +1686,13 @@ function renderHistoryTable(dateStr) {
             <td style="color: var(--text-muted);">${gc}</td>
             <td style="color: var(--text-muted);">${ann}</td>
             <td style="color: var(--text-muted);">${post}</td>
-            <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this)" ${checkedAttr}></td>
+            <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this)" ${checkedAttr} style="margin: 0 auto; display: block; cursor: pointer;"></td>
         `;
         tbody.appendChild(tr);
     });
 }
+
+
 
 function initDevUI() {
     const dDate = localStorage.getItem('devDateOverride');

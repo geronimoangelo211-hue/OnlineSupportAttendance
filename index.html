@@ -30,19 +30,13 @@
             margin: 0;
         }
         
-        /* Fixed: Panels are now strict rectangles to prevent screen overflow */
-        .dash-panel-bottom-row {
-            height: 300px; 
-            display: flex;
-            flex-direction: column;
-        }
         .best-perf-content {
             flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px 0;
+            padding: 10px 0;
             text-align: center;
         }
     </style>
@@ -62,7 +56,7 @@
     </header>
 
     <main id="student-view" class="view active" style="position: relative;">
-        <!-- New System Locked Overlay -->
+        <!-- System Locked Overlay -->
         <div id="student-lock-overlay" class="system-locked-overlay" style="display: none;">
             <span style="font-size: 4rem; margin-bottom: 10px;">🔒</span>
             <h2 class="locked-text">Attendance is Closed</h2>
@@ -179,7 +173,9 @@
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 40px;">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 40px; align-items: stretch;">
+                        
+                        <!-- LEFT COLUMN: Charts -->
                         <div style="display: flex; flex-direction: column; gap: 30px;">
                             
                             <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
@@ -203,27 +199,41 @@
                                 </div>
                             </div>
                             
-                            <!-- UPDATED: Best Performance Panel (Single Name layout, centered, NO scrollbar, strict height) -->
-                            <div class="panel dash-panel-bottom-row">
+                            <!-- NEW: Line Chart -->
+                            <div class="panel" style="flex: 1; min-height: 250px; display: flex; flex-direction: column; padding: 25px;">
+                                <h3 style="margin-top: 0; text-align: left;">Attendance Trend</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Hourly Time-Ins (5:00 AM - 4:00 AM)</p>
+                                <div id="dash-line-chart-container" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative;">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- RIGHT COLUMN: Lists and Performance -->
+                        <div style="display: flex; flex-direction: column; gap: 30px; height: 100%;">
+                            
+                            <!-- Dead Students Alert (Scrollable, takes up remaining space) -->
+                            <div class="panel" style="flex: 1; display: flex; flex-direction: column; min-height: 300px;">
+                                <h3 style="margin-top: 0;">Dead Students Alert</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
+                                <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
+                            </div>
+                            
+                            <!-- Best Performance Panel (Single Name layout) -->
+                            <div class="panel" style="flex-shrink: 0; display: flex; flex-direction: column;">
                                 <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 5px; text-align: left;">
                                     <h3 style="margin: 0;">Best Performance</h3>
-                                    <p class="placeholder-text" style="margin-top: 5px; margin-bottom: 0;">Highest overall accuracy rate across all shifts.</p>
+                                    <p class="placeholder-text" style="margin-top: 5px; margin-bottom: 0;">Highest overall accuracy rate.</p>
                                 </div>
                                 <div class="best-perf-content" id="dash-best-perf-container">
-                                    <div id="dash-best-perf-name" style="font-size: 1.8rem; color: var(--text-main); font-weight: bold;">TBD</div>
+                                    <div id="dash-best-perf-name" style="font-size: 1.6rem; color: var(--text-main); font-weight: bold;">TBD</div>
                                     <div id="dash-best-perf-id" style="font-size: 1rem; color: var(--text-muted); margin-top: 5px;">ID: --</div>
-                                    <div id="dash-best-perf-rate" style="font-size: 3.5rem; color: var(--accent); font-weight: bold; margin-top: 15px; text-shadow: 0 0 15px rgba(var(--accent-rgb), 0.4);">
+                                    <div id="dash-best-perf-rate" style="font-size: 3rem; color: var(--accent); font-weight: bold; margin-top: 15px; text-shadow: 0 0 15px rgba(var(--accent-rgb), 0.4);">
                                         0%
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- UPDATED: Dead Students Alert (Fixed Size WITH Scrollbar inside the list) -->
-                        <div class="panel dash-panel-bottom-row">
-                            <h3 style="margin-top: 0;">Dead Students Alert</h3>
-                            <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
-                            <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
                         </div>
 
                     </div>
@@ -233,6 +243,7 @@
             <div id="sec-attendance" class="admin-section">
                 <div class="panel" style="background: #16181d; padding: 40px 30px; height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 20px; border-radius: 0; border: none; box-shadow: none; position: relative;">
                     
+                    <!-- Admin Live Attendance Lock Overlay -->
                     <div id="admin-live-lock-overlay" class="system-locked-overlay" style="display: none; border-radius: 0;">
                         <span style="font-size: 3rem; margin-bottom: 10px;">🔒</span>
                         <h2 class="locked-text" style="font-size: 1.5rem;">System is Locked</h2>

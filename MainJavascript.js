@@ -74,6 +74,24 @@ let pendingExemptId = null;
 let pendingExemptDate = null;
 let pendingExemptCheckbox = null;
 
+// --- ATTENDANCE SYSTEM LOCK ---
+function toggleAttendanceState(elem) {
+    const knob = document.getElementById('sys-toggle-knob');
+    if (elem.checked) {
+        localStorage.setItem('attendance_closed', 'true');
+        if(knob) {
+            knob.style.transform = 'translateX(20px)';
+            knob.parentElement.style.backgroundColor = 'var(--error)';
+        }
+    } else {
+        localStorage.setItem('attendance_closed', 'false');
+        if(knob) {
+            knob.style.transform = 'translateX(0px)';
+            knob.parentElement.style.backgroundColor = '#334155';
+        }
+    }
+}
+
 function getShiftDateDetails() {
     const pht = getPHT();
     const hour = pht.getHours();
@@ -857,6 +875,13 @@ async function devClearLogs() {
 }
 
 async function handleTimeIn() {
+    // Check if attendance is locked by admin
+    if (localStorage.getItem('attendance_closed') === 'true') {
+        showMessage('student-message', 'Access Denied: The Attendance System is currently CLOSED.', 'error');
+        initSliderCaptcha();
+        return;
+    }
+
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
         initSliderCaptcha();
@@ -941,6 +966,13 @@ async function handleTimeIn() {
 }
 
 async function handleTimeOut() {
+    // Check if attendance is locked by admin
+    if (localStorage.getItem('attendance_closed') === 'true') {
+        showMessage('student-message', 'Access Denied: The Attendance System is currently CLOSED.', 'error');
+        initSliderCaptcha();
+        return;
+    }
+
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
         initSliderCaptcha();
@@ -1363,6 +1395,17 @@ function switchAdminSection(sectionId, navElement) {
             openDevPasswordModal();
         }
         fetchAdminAccounts(); 
+        
+        // Initialize Attendance Lock Toggle UI
+        const lockToggle = document.getElementById('sys-attendance-toggle');
+        const lockKnob = document.getElementById('sys-toggle-knob');
+        if(lockToggle && lockKnob) {
+            const isClosed = localStorage.getItem('attendance_closed') === 'true';
+            lockToggle.checked = isClosed;
+            lockKnob.style.transform = isClosed ? 'translateX(20px)' : 'translateX(0px)';
+            lockKnob.parentElement.style.backgroundColor = isClosed ? 'var(--error)' : '#334155';
+        }
+        
     } else {
         settingsClickCount = 0; 
     }
@@ -2148,32 +2191,42 @@ function renderMainDashboard() {
             });
         }
 
-        const twelveDaysAgo = new Date(getPHT());
-        twelveDaysAgo.setDate(twelveDaysAgo.getDate() - 12); 
+        // --- UPDATED: 21 Days Dead Students ---
+        const cutoffDate = new Date(getPHT());
+        cutoffDate.setDate(cutoffDate.getDate() - 21); 
         
         const deadStudentsList = document.getElementById('dash-dead-students');
         if (deadStudentsList) {
             deadStudentsList.innerHTML = '';
+            deadStudentsList.style.maxHeight = '280px';
+            deadStudentsList.style.overflowY = 'auto';
+            deadStudentsList.style.paddingRight = '5px';
+
             let deadCount = 0;
 
             students.forEach(student => {
-                const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= twelveDaysAgo);
+                const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= cutoffDate);
                 if (!recentLog) {
                     deadCount++;
-                    deadStudentsList.innerHTML += `<div style="padding: 10px; border-bottom: 1px solid #2d313c;">${student.name} <span style="color:var(--error); font-size: 10px; float:right;">INACTIVE</span></div>`;
+                    deadStudentsList.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: var(--text-main); font-size: 13px;">${student.name}</span> 
+                        <span style="color:var(--error); font-weight: bold; font-size: 10px;">INACTIVE</span>
+                    </div>`;
                 }
             });
             if (deadCount === 0) {
-                deadStudentsList.innerHTML = '<p class="placeholder-text">No inactive students.</p>';
+                deadStudentsList.innerHTML = '<p class="placeholder-text" style="text-align: center; padding: 20px;">No inactive students.</p>';
             }
         }
 
-        let bestStudent = "None";
-        let bestScore = -1;
-
+        // --- UPDATED: Scrollable Best Performance List ---
+        let perfList = [];
         students.forEach(student => {
             const studentLogs = logs.filter(l => l.id === student.id);
-            if (studentLogs.length === 0) return;
+            if (studentLogs.length === 0) {
+                perfList.push({ name: student.name, rate: 0 });
+                return;
+            }
 
             let onTimeIn = 0;
             let lateIn = 0;
@@ -2201,15 +2254,30 @@ function renderMainDashboard() {
             perfRate += bonus;
             if (perfRate > 100) perfRate = 100;
 
-            if (perfRate > bestScore) {
-                bestScore = perfRate;
-                bestStudent = `${student.name} (${Math.round(perfRate)}%)`;
-            }
+            perfList.push({ name: student.name, rate: perfRate });
         });
+
+        // Sort descending
+        perfList.sort((a, b) => b.rate - a.rate);
 
         const bestPerfEl = document.getElementById('dash-best-perf');
         if (bestPerfEl) {
-            bestPerfEl.textContent = bestStudent;
+            bestPerfEl.innerHTML = '';
+            bestPerfEl.style.maxHeight = '280px';
+            bestPerfEl.style.overflowY = 'auto';
+            bestPerfEl.style.paddingRight = '5px';
+
+            if(perfList.length === 0) {
+                 bestPerfEl.innerHTML = '<p class="placeholder-text" style="text-align: center; padding: 20px;">No data available.</p>';
+            } else {
+                 perfList.forEach(p => {
+                     let color = p.rate >= 80 ? 'var(--success)' : (p.rate >= 50 ? '#f59e0b' : 'var(--error)');
+                     bestPerfEl.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center;">
+                         <span style="color: var(--text-main); font-size: 13px;">${p.name}</span>
+                         <span style="color: ${color}; font-weight: bold; font-size: 13px;">${Math.round(p.rate)}%</span>
+                     </div>`;
+                 });
+            }
         }
     } catch (e) {
         console.error("Dashboard Render Error:", e);

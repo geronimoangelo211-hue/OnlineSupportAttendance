@@ -128,6 +128,7 @@ function getShiftDateDetails() {
     const hour = pht.getHours();
     
     let shiftDate = new Date(pht);
+    // Late checkouts (12:00 AM - 4:59 AM) belong to the previous day
     if (hour >= 0 && hour < 5) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
@@ -184,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('portal-mode');
 
     checkDeviceLock();
-    checkSystemLockStatus(); // Ensure lock state is applied on load
+    checkSystemLockStatus(); 
     setTimeout(initSliderCaptcha, 50);
 
     isIncognito().then(isPrivate => {
@@ -245,7 +246,6 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
-    // Only process auto-attendance if the system is NOT locked
     if(!isSystemLocked()) {
         checkAndApplyAutoNoAttendance();
         checkAndApplyAutoTimeOut(); 
@@ -1169,7 +1169,7 @@ async function finalizeTimeOut() {
 }
 
 function checkAndApplyAutoNoAttendance() {
-    if(isSystemLocked()) return false; // Stop auto-logs if system is closed
+    if(isSystemLocked()) return false; 
 
     const shift = getShiftDateDetails();
     if (shift.hour < 12 || (shift.hour === 12 && shift.min === 0)) return false; 
@@ -1202,8 +1202,9 @@ function checkAndApplyAutoNoAttendance() {
     return updated;
 }
 
+// --- UPDATED: Replaces Auto-Late with Auto-Exempt after the shift ends (5:00 AM the next day) ---
 function checkAndApplyAutoTimeOut() {
-    if(isSystemLocked()) return false; // Stop auto-logs if system is closed
+    if(isSystemLocked()) return false; 
 
     const shift = getShiftDateDetails();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
@@ -1212,6 +1213,7 @@ function checkAndApplyAutoTimeOut() {
     const uniqueDates = [...new Set(logs.map(l => l.date))];
 
     uniqueDates.forEach(dateStr => {
+        // If the date is no longer today's shift date, the shift has completely rolled over (past 5:00 AM)
         if (dateStr !== shift.dateStr) {
             const dayLogs = logs.filter(l => l.date === dateStr);
             const studentIds = [...new Set(dayLogs.map(l => l.id))];
@@ -1221,18 +1223,19 @@ function checkAndApplyAutoTimeOut() {
                 const hasTimeIn = sLogs.some(l => l.action.includes('Time In'));
                 const hasTimeOut = sLogs.some(l => l.action.includes('Time Out') || l.action.includes('Exempted'));
 
+                // If they logged in but never logged out by the end of the full shift grace period
                 if (hasTimeIn && !hasTimeOut) {
                     const studentName = sLogs[0].name;
                     logs.push({
                         name: studentName,
                         id: id,
-                        action: 'Time Out (Late)',
-                        time: '11:59:59 PM',
+                        action: 'Time Out (Exempted)', // Replaced auto time out with auto exempt
+                        time: 'Exempted',
                         date: dateStr,
                         details: {
-                            gcHandle: 'Auto-Logged by System',
+                            gcHandle: 'System Auto-Exempt',
                             announcement: 'No',
-                            whoPosted: 'System Auto-Log'
+                            whoPosted: 'System'
                         }
                     });
                     updated = true;
@@ -1388,7 +1391,6 @@ async function switchView(viewId) {
     }
 }
 
-// --- NEW DEVELOPER PASSWORD LOGIC ---
 function openDevPasswordModal() {
     document.getElementById('dev-password-input').value = '';
     document.getElementById('dev-password-message').textContent = '';
@@ -1425,14 +1427,11 @@ function switchAdminSection(sectionId, navElement) {
 
     if (sectionId === 'sec-settings') {
         settingsClickCount++;
-        // Prompt password on 20th click if panel isn't already open
-        const devTools = document.getElementById('dev-tools-panel');
-        if (settingsClickCount >= 20 && devTools && devTools.style.display !== 'flex') {
+        if (settingsClickCount >= 20 && document.getElementById('dev-tools-panel') && document.getElementById('dev-tools-panel').style.display !== 'flex') {
             openDevPasswordModal();
         }
         fetchAdminAccounts(); 
         
-        // Initialize Attendance Lock Toggle UI
         const lockToggle = document.getElementById('sys-attendance-toggle');
         const lockKnob = document.getElementById('sys-toggle-knob');
         if(lockToggle && lockKnob) {

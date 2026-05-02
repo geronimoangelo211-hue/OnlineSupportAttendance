@@ -119,6 +119,7 @@ function checkSystemLockStatus() {
     });
 }
 
+// --- SHIFT LOGIC (4:01 AM ROLLOVER) ---
 function getShiftDateDetails() {
     const pht = getPHT();
     const hour = pht.getHours();
@@ -126,6 +127,7 @@ function getShiftDateDetails() {
     
     let shiftDate = new Date(pht);
     // Shift stays on "Yesterday" from 12:00 AM exactly up to 4:00 AM exactly.
+    // At 4:01 AM (hour === 4 && min >= 1), it becomes the NEW shift day.
     if (hour < 4 || (hour === 4 && min === 0)) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
@@ -267,11 +269,9 @@ function processPastShifts() {
     const min = pht.getMinutes();
     
     let currentShiftDate = new Date(pht);
-    // Determine what day the CURRENT active shift belongs to.
     if (hour < 4 || (hour === 4 && min === 0)) {
         currentShiftDate.setDate(currentShiftDate.getDate() - 1); 
     }
-    // Normalize to midnight to establish the exact shift date
     currentShiftDate.setHours(0,0,0,0);
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
@@ -279,7 +279,6 @@ function processPastShifts() {
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    // We check the 3 days prior to the CURRENT active shift to seal any old gaps.
     for (let i = 1; i <= 3; i++) {
         let checkDate = new Date(currentShiftDate);
         checkDate.setDate(checkDate.getDate() - i);
@@ -294,7 +293,6 @@ function processPastShifts() {
             const hasTimeOut = sLogs.some(l => l.action.includes('Out') || l.action.includes('Exempted'));
             const hasNoAtt = sLogs.some(l => l.action === 'No Attendance');
 
-            // 1. Shift entirely missed
             if (sLogs.length === 0) {
                 logs.push({
                     name: student.name,
@@ -306,13 +304,12 @@ function processPastShifts() {
                 });
                 updated = true;
             } 
-            // 2. Timed in, but forgot to time out completely before the 4:00 AM cutoff
             else if (hasTimeIn && !hasTimeOut && !hasNoAtt) {
                 logs.push({
                     name: student.name,
                     id: student.id,
-                    action: 'Time Out (Exempted)', // Auto-Exempted per request
-                    time: '4:00 AM', // Triggered exactly at 4:00 AM limit
+                    action: 'Time Out (Exempted)', 
+                    time: '4:00 AM', 
                     date: checkDateStr,
                     details: {
                         gcHandle: 'Auto-Logged by System',
@@ -502,8 +499,13 @@ function copyRegLink() {
     alert("Secure link copied! Send this to the students.");
 }
 
+// --- UPDATED: Double-Tap Prevention for Create Student ---
 async function createStudent() {
     if(!isAuthenticated()) return;
+    
+    const btn = document.querySelector('button[onclick="createStudent()"]');
+    if (btn && btn.disabled) return; 
+
     const name = document.getElementById('new-student-name').value.trim();
     const idNum = document.getElementById('new-student-id').value.trim();
     const gcHandle = document.getElementById('new-student-gc').value.trim();
@@ -513,36 +515,53 @@ async function createStudent() {
         return;
     }
 
-    await pullFromCloud();
-
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    
-    if (students.some(s => s.id === idNum)) {
-        showMessage('admin-message', 'Student ID already exists!', 'error');
-        return;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "ADDING...";
+        btn.style.opacity = "0.7";
+        btn.style.cursor = "not-allowed";
     }
 
-    students.push({ 
-        name: name, 
-        id: idNum, 
-        assignedDays: [],
-        gcHandle: gcHandle
-    });
-    
-    localStorage.setItem('students', JSON.stringify(students));
-    await pushStudentsToCloud(); 
-    
-    document.getElementById('new-student-name').value = '';
-    document.getElementById('new-student-id').value = '';
-    document.getElementById('new-student-gc').value = '';
-    
-    showMessage('admin-message', 'Student created globally!', 'success');
-    
-    renderStudents();
-    renderSchedule();
-    renderMainDashboard(); 
-    renderDashboardSummary();
-    renderDutyToday();
+    try {
+        await pullFromCloud();
+
+        const students = JSON.parse(localStorage.getItem('students')) || [];
+        
+        // Use toLowerCase for safer duplicate checking
+        if (students.some(s => s.id.toLowerCase() === idNum.toLowerCase())) {
+            showMessage('admin-message', 'Student ID already exists!', 'error');
+            return;
+        }
+
+        students.push({ 
+            name: name, 
+            id: idNum, 
+            assignedDays: [],
+            gcHandle: gcHandle
+        });
+        
+        localStorage.setItem('students', JSON.stringify(students));
+        await pushStudentsToCloud(); 
+        
+        document.getElementById('new-student-name').value = '';
+        document.getElementById('new-student-id').value = '';
+        document.getElementById('new-student-gc').value = '';
+        
+        showMessage('admin-message', 'Student created globally!', 'success');
+        
+        renderStudents();
+        renderSchedule();
+        renderMainDashboard(); 
+        renderDashboardSummary();
+        renderDutyToday();
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "ADD STUDENT";
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+        }
+    }
 }
 
 async function updateStudentGC() {
@@ -626,8 +645,13 @@ function closeEditStudentModal() {
     document.getElementById('edit-student-modal').style.display = 'none';
 }
 
+// --- UPDATED: Double-Tap Prevention for Edit Student ---
 async function saveStudentEdit() {
     if(!isAuthenticated()) return;
+    
+    const btn = document.querySelector('#edit-student-modal .btn-primary');
+    if (btn && btn.disabled) return;
+
     const origId = document.getElementById('edit-stu-orig-id').value;
     const name = document.getElementById('edit-stu-name').value.trim();
     const newId = document.getElementById('edit-stu-id').value.trim();
@@ -642,50 +666,66 @@ async function saveStudentEdit() {
         return;
     }
 
-    await pullFromCloud();
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    
-    if (newId !== origId && students.some(x => x.id === newId)) {
-        alert("This Student ID is already in use by another student!");
-        return;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "SAVING...";
+        btn.style.opacity = "0.7";
+        btn.style.cursor = "not-allowed";
     }
 
-    const s = students.find(x => x.id === origId);
-    
-    if (s) {
-        s.name = name;
-        s.id = newId; 
-        s.gcHandle = gc;
-        localStorage.setItem('students', JSON.stringify(students));
-        await pushStudentsToCloud();
+    try {
+        await pullFromCloud();
+        const students = JSON.parse(localStorage.getItem('students')) || [];
         
-        if (origId !== newId) {
-            let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-            let logsUpdated = false;
+        if (newId !== origId && students.some(x => x.id.toLowerCase() === newId.toLowerCase())) {
+            alert("This Student ID is already in use by another student!");
+            return;
+        }
+
+        const s = students.find(x => x.id === origId);
+        
+        if (s) {
+            s.name = name;
+            s.id = newId; 
+            s.gcHandle = gc;
+            localStorage.setItem('students', JSON.stringify(students));
+            await pushStudentsToCloud();
             
-            logs.forEach(l => {
-                if (l.id === origId) {
-                    l.id = newId;
-                    l.name = name; 
-                    logsUpdated = true;
+            if (origId !== newId) {
+                let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+                let logsUpdated = false;
+                
+                logs.forEach(l => {
+                    if (l.id === origId) {
+                        l.id = newId;
+                        l.name = name; 
+                        logsUpdated = true;
+                    }
+                });
+                
+                if (logsUpdated) {
+                    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+                    await pushLogsToCloud();
                 }
-            });
-            
-            if (logsUpdated) {
-                localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-                await pushLogsToCloud();
             }
+            
+            renderStudents();
+            renderSchedule();
+            renderMainDashboard();
+            renderDashboardSummary();
+            renderDutyToday();
+            if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
         }
         
-        renderStudents();
-        renderSchedule();
-        renderMainDashboard();
-        renderDashboardSummary();
-        renderDutyToday();
-        if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
+        closeEditStudentModal();
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Save Changes";
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+        }
     }
-    
-    closeEditStudentModal();
 }
 
 async function deleteStudent(idNum) {
@@ -744,7 +784,7 @@ async function toggleStudentDay(id, day) {
 }
 
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
-    if(isSystemLocked()) return; 
+    if(isSystemLocked()) return; // Extra backend protection
 
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];

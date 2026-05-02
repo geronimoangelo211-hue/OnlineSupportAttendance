@@ -14,6 +14,97 @@ const isAuthenticated = function() {
     }
 };
 
+// --- NEW TRUE BACKEND LOCK STATE ---
+let isBackendLocked = false; 
+
+// Continually poll the backend for the true system status
+async function checkBackendLockStatus() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/config/status`, { cache: 'no-store' });
+        if (response.ok) {
+            const data = await response.json();
+            if (isBackendLocked !== data.isLocked) {
+                isBackendLocked = data.isLocked;
+                localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
+                applyUIRestrictions();
+            }
+        }
+    } catch (err) {
+        console.warn("Could not reach backend for lock status.");
+    }
+}
+
+// Toggle the lock by telling the backend to change state
+async function toggleAttendanceState(elem) {
+    const isClosed = elem.checked;
+    
+    // Optimistic UI update
+    const knob = document.getElementById('sys-toggle-knob');
+    if(knob) {
+        knob.style.transform = isClosed ? 'translateX(20px)' : 'translateX(0px)';
+        knob.parentElement.style.backgroundColor = isClosed ? 'var(--error)' : '#334155';
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/config/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isLocked: isClosed })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            isBackendLocked = data.isLocked;
+            localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
+            applyUIRestrictions();
+        } else {
+            // Revert UI if backend call failed
+            elem.checked = !isClosed;
+            if(knob) {
+                knob.style.transform = !isClosed ? 'translateX(20px)' : 'translateX(0px)';
+                knob.parentElement.style.backgroundColor = !isClosed ? 'var(--error)' : '#334155';
+            }
+            alert("Failed to sync lock state with server.");
+        }
+    } catch (err) {
+        console.error("Lock Sync Error:", err);
+        elem.checked = !isClosed;
+        alert("Network error trying to lock system.");
+    }
+}
+
+function applyUIRestrictions() {
+    const isLocked = localStorage.getItem('attendance_closed') === 'true';
+    
+    // Update Admin UI Toggle if open
+    const lockToggle = document.getElementById('sys-attendance-toggle');
+    const lockKnob = document.getElementById('sys-toggle-knob');
+    if(lockToggle && lockKnob) {
+        lockToggle.checked = isLocked;
+        lockKnob.style.transform = isLocked ? 'translateX(20px)' : 'translateX(0px)';
+        lockKnob.parentElement.style.backgroundColor = isLocked ? 'var(--error)' : '#334155';
+    }
+    
+    const studentLockOverlay = document.getElementById('student-lock-overlay');
+    if (studentLockOverlay) {
+        studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
+    }
+
+    const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
+    if (adminLiveLockOverlay) {
+        adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
+        if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
+            btn.disabled = isLocked;
+            btn.style.opacity = isLocked ? '0.5' : '1';
+            btn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
+        }
+    });
+}
+
+
 async function pullFromCloud() {
     try {
         const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
@@ -23,14 +114,6 @@ async function pullFromCloud() {
 
             if (cloudStudents.length > 0) {
                 localStorage.setItem('students', JSON.stringify(cloudStudents));
-                
-                // NEW: Cloud Synchronization for System Lock
-                const configStu = cloudStudents.find(s => s.id === 'SYS_CONFIG_X99');
-                if (configStu && configStu.isLocked !== undefined) {
-                    localStorage.setItem('attendance_closed', configStu.isLocked ? 'true' : 'false');
-                    checkSystemLockStatus(); // Apply lock immediately if another device triggered it
-                }
-
             } else if (localStudents.length > 0) {
                 await pushStudentsToCloud();
             }
@@ -66,11 +149,19 @@ async function pushStudentsToCloud() {
 async function pushLogsToCloud() {
     const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     try {
-        await fetch(`${API_BASE_URL}/logs/sync`, {
+        const response = await fetch(`${API_BASE_URL}/logs/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
+
+        // Backend rejected the sync because system is locked
+        if (response.status === 403) {
+            console.warn("Backend rejected sync: SYSTEM IS LOCKED.");
+            isBackendLocked = true;
+            localStorage.setItem('attendance_closed', 'true');
+            applyUIRestrictions();
+        }
     } catch (err) { console.error("Cloud Log Sync Failed"); }
 }
 
@@ -82,61 +173,6 @@ let pendingExemptId = null;
 let pendingExemptDate = null;
 let pendingExemptCheckbox = null;
 
-// --- ATTENDANCE SYSTEM LOCK LOGIC (CLOUD SYNCED) ---
-function isSystemLocked() {
-    return localStorage.getItem('attendance_closed') === 'true';
-}
-
-function toggleAttendanceState(elem) {
-    const isClosed = elem.checked;
-    localStorage.setItem('attendance_closed', isClosed ? 'true' : 'false');
-    
-    // Inject lock state into a hidden system profile to sync to the cloud database
-    let students = JSON.parse(localStorage.getItem('students')) || [];
-    let configIndex = students.findIndex(s => s.id === 'SYS_CONFIG_X99');
-    
-    if (configIndex === -1) {
-        students.push({ id: 'SYS_CONFIG_X99', name: 'SYSTEM_SETTINGS', assignedDays: [], gcHandle: 'SYS', isLocked: isClosed });
-    } else {
-        students[configIndex].isLocked = isClosed;
-    }
-    
-    localStorage.setItem('students', JSON.stringify(students));
-    pushStudentsToCloud(); // Immediately push lock command to cloud
-
-    checkSystemLockStatus();
-}
-
-function checkSystemLockStatus() {
-    const isLocked = isSystemLocked();
-    
-    // Auto-update the knob UI in case it was locked by another device remotely
-    const lockToggle = document.getElementById('sys-attendance-toggle');
-    const lockKnob = document.getElementById('sys-toggle-knob');
-    if(lockToggle && lockKnob) {
-        lockToggle.checked = isLocked;
-        lockKnob.style.transform = isLocked ? 'translateX(20px)' : 'translateX(0px)';
-        lockKnob.parentElement.style.backgroundColor = isLocked ? 'var(--error)' : '#334155';
-    }
-    
-    const studentLockOverlay = document.getElementById('student-lock-overlay');
-    if (studentLockOverlay) {
-        studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
-    }
-
-    const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
-    if (adminLiveLockOverlay) {
-        adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
-    }
-
-    document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
-        if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
-            btn.disabled = isLocked;
-            btn.style.opacity = isLocked ? '0.5' : '1';
-            btn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
-        }
-    });
-}
 
 function getShiftDateDetails() {
     const pht = getPHT();
@@ -200,8 +236,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAccentColor();
     document.body.classList.add('portal-mode');
 
+    // Immediately fetch true lock status on load
+    checkBackendLockStatus().then(() => {
+        applyUIRestrictions();
+    });
+    
     checkDeviceLock();
-    checkSystemLockStatus(); 
     setTimeout(initSliderCaptcha, 50);
 
     isIncognito().then(isPrivate => {
@@ -266,9 +306,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 setInterval(async () => {
     await pullFromCloud(); 
-    checkSystemLockStatus();
+    await checkBackendLockStatus(); 
     
-    if(!isSystemLocked()) {
+    if(!isBackendLocked) {
         processPastShifts(); 
     }
     
@@ -284,7 +324,7 @@ setInterval(async () => {
 
 // --- UNIFIED SHIFT ROLLOVER & AUTO-LOGGING SYSTEM (WITH GHOST PREVENTION) ---
 function processPastShifts() {
-    if(isSystemLocked()) return false;
+    if(isBackendLocked) return false;
 
     const pht = getPHT();
     const hour = pht.getHours();
@@ -298,7 +338,6 @@ function processPastShifts() {
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99'); // Exclude hidden config
     const deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || []; 
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -311,7 +350,7 @@ function processPastShifts() {
 
         if (deletedDates.includes(checkDateStr)) continue;
 
-        const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
+        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
         
         scheduledStudents.forEach(student => {
             const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
@@ -806,8 +845,12 @@ async function toggleStudentDay(id, day) {
     }
 }
 
+// Ensure the backend isn't locked before trying to push a Time In/Out
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
-    if(isSystemLocked()) return; 
+    if(isBackendLocked) {
+        alert("The system is currently locked. Attendance cannot be recorded.");
+        return;
+    }
 
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
@@ -861,9 +904,9 @@ function deleteHistoryDate(dateStr, event) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         logs = logs.filter(l => l.date !== dateStr);
+        
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
 
-        // Adds to permanent blacklist so the auto-scanner ignores it forever
         let deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || [];
         if (!deletedDates.includes(dateStr)) {
             deletedDates.push(dateStr);
@@ -1055,7 +1098,10 @@ async function devClearLogs() {
 }
 
 async function handleTimeIn() {
-    if (isSystemLocked()) return; 
+    if (isBackendLocked) {
+        showMessage('student-message', 'Access Denied: The system is locked.', 'error');
+        return; 
+    }
 
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -1080,6 +1126,11 @@ async function handleTimeIn() {
 
     try {
         await pullFromCloud();
+        if (isBackendLocked) {
+            showMessage('student-message', 'Access Denied: The system is locked.', 'error');
+            applyUIRestrictions();
+            return;
+        }
 
         const students = JSON.parse(localStorage.getItem('students')) || [];
         const student = students.find(s => s.id === idNum);
@@ -1138,7 +1189,10 @@ async function handleTimeIn() {
 }
 
 async function handleTimeOut() {
-    if (isSystemLocked()) return; 
+    if (isBackendLocked) {
+        showMessage('student-message', 'Access Denied: The system is locked.', 'error');
+        return; 
+    }
 
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -1163,6 +1217,11 @@ async function handleTimeOut() {
 
     try {
         await pullFromCloud();
+        if (isBackendLocked) {
+            showMessage('student-message', 'Access Denied: The system is locked.', 'error');
+            applyUIRestrictions();
+            return;
+        }
 
         const students = JSON.parse(localStorage.getItem('students')) || [];
         const student = students.find(s => s.id === idNum);
@@ -1250,7 +1309,10 @@ async function handleTimeOut() {
 }
 
 async function finalizeTimeOut() {
-    if(isSystemLocked()) return; 
+    if(isBackendLocked) {
+        alert("The system is currently locked. Attendance cannot be recorded.");
+        return;
+    }
 
     let gcHandle = document.getElementById('gc-handle').value;
     const announcement = document.querySelector('input[name="announcement"]:checked');
@@ -1485,15 +1547,7 @@ function switchAdminSection(sectionId, navElement) {
         }
         fetchAdminAccounts(); 
         
-        const lockToggle = document.getElementById('sys-attendance-toggle');
-        const lockKnob = document.getElementById('sys-toggle-knob');
-        if(lockToggle && lockKnob) {
-            const isClosed = localStorage.getItem('attendance_closed') === 'true';
-            lockToggle.checked = isClosed;
-            lockKnob.style.transform = isClosed ? 'translateX(20px)' : 'translateX(0px)';
-            lockKnob.parentElement.style.backgroundColor = isClosed ? 'var(--error)' : '#334155';
-        }
-        
+        checkBackendLockStatus(); 
     } else {
         settingsClickCount = 0; 
     }
@@ -1543,7 +1597,6 @@ function renderLogs() {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const tbody = document.getElementById('attendance-logs-body');
     
     const searchInput = document.getElementById('search-attendance-global');
@@ -1558,7 +1611,7 @@ function renderLogs() {
     const logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
 
     logsWithIndex.reverse().filter(log => {
-        const student = validStudents.find(s => s.id === log.id);
+        const student = students.find(s => s.id === log.id);
         const isScheduledToday = student && student.assignedDays && student.assignedDays.includes(currentDay);
         
         return log.date === todayStr &&
@@ -1598,7 +1651,6 @@ function renderLogs() {
 function renderDutyToday() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dutyList = document.getElementById('duty-today-list');
     if (!dutyList) return;
@@ -1607,7 +1659,7 @@ function renderDutyToday() {
     const currentDay = shift.dayStr;
     const todayStr = shift.dateStr;
 
-    const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
+    const scheduledToday = students.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
     scheduledToday.sort((a, b) => a.name.localeCompare(b.name));
 
     dutyList.innerHTML = '';
@@ -1645,7 +1697,6 @@ function exportToExcel(dateStr = null) {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const shift = getShiftDateDetails();
     const targetDate = dateStr || shift.dateStr;
     const targetLogs = logs.filter(l => l.date === targetDate);
@@ -1654,7 +1705,7 @@ function exportToExcel(dateStr = null) {
         ["NAME", "ID NUMBER", "TIME IN", "TIME OUT", "DATE", "GC HANDLE", "ANNOUNCEMENT", "POSTED BY"]
     ];
 
-    const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
@@ -1731,10 +1782,9 @@ async function recordToGoogleSheets(dateStr) {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const targetLogs = logs.filter(l => l.date === dateStr);
 
-    if (validStudents.length === 0) {
+    if (students.length === 0) {
         alert("No registered students found.");
         return;
     }
@@ -1749,7 +1799,7 @@ async function recordToGoogleSheets(dateStr) {
     }
 
     const payload = [];
-    const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
@@ -1928,7 +1978,6 @@ async function resetStudentUI() {
 function renderSchedule() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const tbody = document.getElementById('schedule-logs-body');
     
     const searchInput = document.getElementById('search-schedule');
@@ -1945,7 +1994,7 @@ function renderSchedule() {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const dayLabels = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
     
-    let filteredStudents = validStudents.filter(student => 
+    let filteredStudents = students.filter(student => 
         (student.name && student.name.toLowerCase().includes(query)) || 
         (student.id && student.id.toLowerCase().includes(query)) ||
         (student.gcHandle && student.gcHandle.toLowerCase().includes(query))
@@ -2206,16 +2255,15 @@ function renderMainDashboard() {
     if(!isAuthenticated()) return;
     try {
         const students = JSON.parse(localStorage.getItem('students')) || [];
-        const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
         const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         const shift = getShiftDateDetails();
         const todayStr = shift.dateStr;
         const currentDay = shift.dayStr;
 
         const dashTotal = document.getElementById('dash-total');
-        if(dashTotal) dashTotal.textContent = validStudents.length;
+        if(dashTotal) dashTotal.textContent = students.length;
 
-        const scheduledToday = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(currentDay));
+        const scheduledToday = students.filter(s => s.assignedDays && s.assignedDays.includes(currentDay));
         const totalScheduled = scheduledToday.length;
 
         let presentCount = 0;
@@ -2300,7 +2348,7 @@ function renderMainDashboard() {
 
             let deadCount = 0;
 
-            validStudents.forEach(student => {
+            students.forEach(student => {
                 const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= cutoffDate);
                 if (!recentLog) {
                     deadCount++;
@@ -2317,7 +2365,7 @@ function renderMainDashboard() {
 
         let perfList = [];
 
-        validStudents.forEach(student => {
+        students.forEach(student => {
             const studentLogs = logs.filter(l => l.id === student.id);
             if (studentLogs.length === 0) return;
 
@@ -2389,7 +2437,6 @@ function renderMainDashboard() {
 function renderDashboardSummary() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const tbody = document.getElementById('summary-body');
     
@@ -2403,7 +2450,7 @@ function renderDashboardSummary() {
     const todayStr = shift.dateStr;
     const currentDay = shift.dayStr;
 
-    const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
+    const scheduledToday = students.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
 
     const filteredStudents = scheduledToday.filter(student => 
         student.name.toLowerCase().includes(query) || 

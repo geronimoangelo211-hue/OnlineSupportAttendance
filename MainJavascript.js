@@ -119,7 +119,6 @@ function checkSystemLockStatus() {
     });
 }
 
-// --- SHIFT LOGIC (4:01 AM ROLLOVER) ---
 function getShiftDateDetails() {
     const pht = getPHT();
     const hour = pht.getHours();
@@ -127,7 +126,6 @@ function getShiftDateDetails() {
     
     let shiftDate = new Date(pht);
     // Shift stays on "Yesterday" from 12:00 AM exactly up to 4:00 AM exactly.
-    // At 4:01 AM (hour === 4 && min >= 1), it becomes the NEW shift day.
     if (hour < 4 || (hour === 4 && min === 0)) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
@@ -155,6 +153,7 @@ const ACCENT_COLORS = {
 
 if (!localStorage.getItem('students')) localStorage.setItem('students', JSON.stringify([]));
 if (!localStorage.getItem('attendanceLogs')) localStorage.setItem('attendanceLogs', JSON.stringify([]));
+if (!localStorage.getItem('deletedDates')) localStorage.setItem('deletedDates', JSON.stringify([]));
 
 let _studentsInit = JSON.parse(localStorage.getItem('students')) || [];
 let _needsSave = false;
@@ -245,7 +244,6 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
-    // Process previous days' rollover data strictly at 4:01 AM or later.
     if(!isSystemLocked()) {
         processPastShifts(); 
     }
@@ -260,7 +258,7 @@ setInterval(async () => {
     }
 }, 15000);
 
-// --- UNIFIED SHIFT ROLLOVER & AUTO-LOGGING SYSTEM ---
+// --- UNIFIED SHIFT ROLLOVER & AUTO-LOGGING SYSTEM (WITH GHOST PREVENTION) ---
 function processPastShifts() {
     if(isSystemLocked()) return false;
 
@@ -276,6 +274,7 @@ function processPastShifts() {
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || []; 
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -284,6 +283,9 @@ function processPastShifts() {
         checkDate.setDate(checkDate.getDate() - i);
         let checkDateStr = checkDate.toLocaleDateString('en-US');
         let checkDayStr = dayNames[checkDate.getDay()];
+
+        // If user manually deleted this date from history, completely skip recreating logs for it!
+        if (deletedDates.includes(checkDateStr)) continue;
 
         const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
         
@@ -499,7 +501,6 @@ function copyRegLink() {
     alert("Secure link copied! Send this to the students.");
 }
 
-// --- UPDATED: Double-Tap Prevention for Create Student ---
 async function createStudent() {
     if(!isAuthenticated()) return;
     
@@ -527,7 +528,6 @@ async function createStudent() {
 
         const students = JSON.parse(localStorage.getItem('students')) || [];
         
-        // Use toLowerCase for safer duplicate checking
         if (students.some(s => s.id.toLowerCase() === idNum.toLowerCase())) {
             showMessage('admin-message', 'Student ID already exists!', 'error');
             return;
@@ -645,7 +645,6 @@ function closeEditStudentModal() {
     document.getElementById('edit-student-modal').style.display = 'none';
 }
 
-// --- UPDATED: Double-Tap Prevention for Edit Student ---
 async function saveStudentEdit() {
     if(!isAuthenticated()) return;
     
@@ -784,7 +783,7 @@ async function toggleStudentDay(id, day) {
 }
 
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
-    if(isSystemLocked()) return; // Extra backend protection
+    if(isSystemLocked()) return; 
 
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
@@ -840,6 +839,13 @@ function deleteHistoryDate(dateStr, event) {
         logs = logs.filter(l => l.date !== dateStr);
         
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+
+        // Add to permanent blacklist so the auto-scanner ignores it forever
+        let deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || [];
+        if (!deletedDates.includes(dateStr)) {
+            deletedDates.push(dateStr);
+            localStorage.setItem('deletedDates', JSON.stringify(deletedDates));
+        }
         
         pushLogsToCloud(); 
         
@@ -1012,6 +1018,7 @@ async function devClearLogs() {
     if(!isAuthenticated()) return;
     if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
+        localStorage.setItem('deletedDates', JSON.stringify([])); // clear blacklist too
         await pushLogsToCloud(); 
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -1190,7 +1197,6 @@ async function handleTimeOut() {
         } 
 
         pendingTimeOutStudent = student;
-        // Shift hour 0-3 and exactly 4:00 AM evaluates as Late for the previous day. 
         pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
         pendingTimeOutDate = shift.dateStr; 
         

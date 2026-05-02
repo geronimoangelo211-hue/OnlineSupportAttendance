@@ -1408,55 +1408,62 @@ function renderDutyToday() {
 
 function exportToExcel(dateStr = null) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const students = JSON.parse(localStorage.getItem('students')) || [];
     const shift = getShiftDateDetails();
     const targetDate = dateStr || shift.dateStr;
     const targetLogs = logs.filter(l => l.date === targetDate);
-
-    if (targetLogs.length === 0) {
-        alert(`No attendance logs found for ${targetDate} to export.`);
-        return;
-    }
 
     const data = [
         ["NAME", "ID NUMBER", "TIME IN", "TIME OUT", "DATE", "GC HANDLE", "ANNOUNCEMENT", "POSTED BY"]
     ];
 
-    const studentIds = new Set(targetLogs.map(l => l.id));
+    const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
 
-    studentIds.forEach(id => {
-        const studentLogs = targetLogs.filter(l => l.id === id);
-        const name = studentLogs[0].name;
+    sortedStudents.forEach(student => {
+        const studentLogs = targetLogs.filter(l => l.id === student.id);
 
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
-        let inText = '--';
-        let outText = '--';
-        let gc = '';
-        let ann = '';
-        let post = '';
+        let inText = 'Absent';
+        let outText = 'Absent';
+        let gc = '-';
+        let ann = '-';
+        let post = '-';
 
-        if (timeInLog) {
-            if (timeInLog.action.includes('Exempted')) inText = 'Exempted';
-            else inText = `${timeInLog.time} (${timeInLog.action.includes('Late') ? 'Late' : 'On Time'})`;
+        if (exemptLog) {
+            inText = 'Exempted';
+            outText = 'Exempted';
         } else if (noAttLog) {
-            inText = 'No Attendance';
+            inText = 'Absent';
+            outText = 'Absent';
+        } else {
+            if (timeInLog) {
+                if (timeInLog.action.includes('Exempted')) {
+                    inText = 'Exempted';
+                } else {
+                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                    inText = `${timeInLog.time} - ${status}`;
+                }
+            }
+
+            if (timeOutLog) {
+                if (timeOutLog.action.includes('Exempted')) {
+                    outText = 'Exempted';
+                } else {
+                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                    outText = `${timeOutLog.time} - ${status}`;
+                    const details = timeOutLog.details || {};
+                    gc = details.gcHandle || '-';
+                    ann = details.announcement || '-';
+                    post = details.whoPosted || '-';
+                }
+            }
         }
 
-        if (timeOutLog) {
-            if (timeOutLog.action.includes('Exempted')) outText = 'Exempted';
-            else outText = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'Late' : 'On Time'})`;
-            
-            const details = timeOutLog.details || {};
-            gc = details.gcHandle || '';
-            ann = details.announcement || '';
-            post = details.whoPosted || '';
-        } else if (noAttLog) {
-            outText = 'No Attendance';
-        }
-
-        data.push([name, id, inText, outText, targetDate, gc, ann, post]);
+        data.push([student.name, student.id, inText, outText, targetDate, gc, ann, post]);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(data);
@@ -1481,6 +1488,104 @@ function exportToExcel(dateStr = null) {
 
     const dateFileName = targetDate.replace(/\//g, '-');
     XLSX.writeFile(wb, `Support_Attendance_${dateFileName}.xlsx`);
+}
+
+async function recordToGoogleSheets(dateStr) {
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const targetLogs = logs.filter(l => l.date === dateStr);
+
+    const sheetBtn = document.getElementById('history-sheet-btn');
+    const originalText = sheetBtn.textContent;
+    sheetBtn.textContent = "SENDING...";
+    sheetBtn.disabled = true;
+    sheetBtn.style.opacity = "0.5";
+
+    const payload = [];
+    const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
+
+    sortedStudents.forEach(student => {
+        const studentLogs = targetLogs.filter(l => l.id === student.id);
+
+        const timeInLog = studentLogs.find(l => l.action.includes('In'));
+        const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+        const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
+
+        let inText = 'Absent';
+        let outText = 'Absent';
+        let gc = '-';
+        let ann = '-';
+        let post = '-';
+
+        if (exemptLog) {
+            inText = 'Exempted';
+            outText = 'Exempted';
+        } else if (noAttLog) {
+            inText = 'Absent';
+            outText = 'Absent';
+        } else {
+            if (timeInLog) {
+                if (timeInLog.action.includes('Exempted')) {
+                    inText = 'Exempted';
+                } else {
+                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                    inText = `${timeInLog.time} - ${status}`;
+                }
+            }
+
+            if (timeOutLog) {
+                if (timeOutLog.action.includes('Exempted')) {
+                    outText = 'Exempted';
+                } else {
+                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                    outText = `${timeOutLog.time} - ${status}`;
+                    const details = timeOutLog.details || {};
+                    gc = details.gcHandle || '-';
+                    ann = details.announcement || '-';
+                    post = details.whoPosted || '-';
+                }
+            }
+        }
+
+        payload.push({
+            name: student.name,
+            id: student.id,
+            timeIn: inText,
+            timeOut: outText,
+            date: dateStr,
+            gcHandle: gc,
+            announcement: ann,
+            postedBy: post
+        });
+    });
+
+    const GOOGLE_SCRIPT_URL = "YOUR_WEB_APP_URL_HERE";
+
+    try {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8', 
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert(`Successfully recorded logs for ${dateStr} to Google Sheets!`);
+        } else {
+            alert(`Failed to record: ${result.error}`);
+        }
+    } catch (error) {
+        console.error("Error sending to Google Sheets:", error);
+        alert("Network error trying to contact Google Sheets.");
+    } finally {
+        sheetBtn.textContent = originalText;
+        sheetBtn.disabled = false;
+        sheetBtn.style.opacity = "1";
+    }
 }
 
 function showMessage(elementId, text, type) {
@@ -1675,6 +1780,7 @@ function renderHistoryTable(dateStr) {
     document.getElementById('history-table-title').textContent = `Logs for ${dateStr}`;
     
     document.getElementById('history-export-btn').onclick = () => exportToExcel(dateStr);
+    document.getElementById('history-sheet-btn').onclick = () => recordToGoogleSheets(dateStr);
     
     const exemptAllBtn = document.getElementById('history-exempt-all-btn');
     if (exemptAllBtn) {

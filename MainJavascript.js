@@ -74,7 +74,7 @@ let pendingExemptId = null;
 let pendingExemptDate = null;
 let pendingExemptCheckbox = null;
 
-// --- ATTENDANCE SYSTEM LOCK ---
+// --- ATTENDANCE SYSTEM LOCK LOGIC ---
 function isSystemLocked() {
     return localStorage.getItem('attendance_closed') === 'true';
 }
@@ -100,20 +100,21 @@ function toggleAttendanceState(elem) {
 function checkSystemLockStatus() {
     const isLocked = isSystemLocked();
     
-    // Student View Lock
+    // Student View Overlay
     const studentLockOverlay = document.getElementById('student-lock-overlay');
     if (studentLockOverlay) {
         studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
     }
 
-    // Admin Live Attendance Lock
+    // Admin Live Attendance Overlay
     const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
     if (adminLiveLockOverlay) {
         adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
     }
 
-    // Disable action buttons globally if locked
+    // Disable primary action buttons visually and functionally
     document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
+        // Exclude buttons inside modals (like 'Cancel') or navigation toggles
         if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
             btn.disabled = isLocked;
             btn.style.opacity = isLocked ? '0.5' : '1';
@@ -183,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('portal-mode');
 
     checkDeviceLock();
-    checkSystemLockStatus();
+    checkSystemLockStatus(); // Ensure lock state is applied on load
     setTimeout(initSliderCaptcha, 50);
 
     isIncognito().then(isPrivate => {
@@ -244,6 +245,7 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
+    // Only process auto-attendance if the system is NOT locked
     if(!isSystemLocked()) {
         checkAndApplyAutoNoAttendance();
         checkAndApplyAutoTimeOut(); 
@@ -911,7 +913,7 @@ async function devClearLogs() {
 }
 
 async function handleTimeIn() {
-    if (isSystemLocked()) return; // Fallback check
+    if (isSystemLocked()) return; 
 
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -997,7 +999,7 @@ async function handleTimeIn() {
 }
 
 async function handleTimeOut() {
-    if (isSystemLocked()) return; // Fallback check
+    if (isSystemLocked()) return; 
 
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -1114,7 +1116,7 @@ async function handleTimeOut() {
 }
 
 async function finalizeTimeOut() {
-    if(isSystemLocked()) return; // Extra backend protection
+    if(isSystemLocked()) return; 
 
     let gcHandle = document.getElementById('gc-handle').value;
     const announcement = document.querySelector('input[name="announcement"]:checked');
@@ -1355,7 +1357,7 @@ async function switchView(viewId) {
             checkDeviceLock(); 
             setTimeout(initSliderCaptcha, 50); 
         }
-        checkSystemLockStatus(); // Ensure overlay applies if they return to student view
+        checkSystemLockStatus(); 
     }
     
     generateAdminCaptcha();
@@ -1372,7 +1374,7 @@ async function switchView(viewId) {
         renderLogs();
         renderMainDashboard(); 
         renderDutyToday(); 
-        checkSystemLockStatus(); // Ensure live attendance locks
+        checkSystemLockStatus(); 
     } else {
         document.body.classList.add('portal-mode'); 
         const mh = document.getElementById('main-header');
@@ -2290,16 +2292,23 @@ function renderMainDashboard() {
 
             if (perfRate > bestScore) {
                 bestScore = perfRate;
-                bestStudentObj = { name: student.name, rate: Math.round(perfRate) };
+                bestStudentObj = { name: student.name, id: student.id, rate: Math.round(perfRate) };
             }
         });
 
-        const bestPerfEl = document.getElementById('dash-best-perf');
-        if (bestPerfEl) {
+        const bestPerfNameEl = document.getElementById('dash-best-perf-name');
+        const bestPerfIdEl = document.getElementById('dash-best-perf-id');
+        const bestPerfRateEl = document.getElementById('dash-best-perf-rate');
+
+        if (bestPerfNameEl && bestPerfIdEl && bestPerfRateEl) {
             if (bestStudentObj) {
-                bestPerfEl.innerHTML = `${bestStudentObj.name} <span style="color: var(--accent); font-size: 1.8rem; text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.3);">(${bestStudentObj.rate}%)</span>`;
+                bestPerfNameEl.textContent = bestStudentObj.name;
+                bestPerfIdEl.textContent = `ID: ${bestStudentObj.id}`;
+                bestPerfRateEl.textContent = `${bestStudentObj.rate}%`;
             } else {
-                bestPerfEl.innerHTML = 'TBD <span style="color: var(--text-muted); font-size: 1.2rem;">(0%)</span>';
+                bestPerfNameEl.textContent = 'TBD';
+                bestPerfIdEl.textContent = 'ID: --';
+                bestPerfRateEl.textContent = '0%';
             }
         }
     } catch (e) {

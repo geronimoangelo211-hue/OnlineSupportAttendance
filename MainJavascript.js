@@ -1,4 +1,18 @@
+console.log("%cSTOP!", "color: red; font-size: 50px; font-weight: bold; font-family: sans-serif; text-shadow: 2px 2px 0 #000;");
+console.log("%cThis is a browser feature intended for developers. If someone told you to copy-paste something here to hack the attendance system, it is a scam and your access will be logged.", "color: white; background: red; font-size: 16px; padding: 5px 10px; border-radius: 5px;");
+
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
+
+const isAuthenticated = function() {
+    const tk = sessionStorage.getItem('_auth_tkn_x92');
+    if(!tk) return false;
+    try {
+        const parsed = JSON.parse(atob(tk));
+        return parsed.valid === true && (Date.now() - parsed.timestamp < 12 * 60 * 60 * 1000); 
+    } catch(e) {
+        return false;
+    }
+};
 
 async function pullFromCloud() {
     try {
@@ -153,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (sessionStorage.getItem('adminLoggedIn') === 'true') {
+    if (isAuthenticated()) {
         switchView('admin-dashboard-view');
         const savedSec = sessionStorage.getItem('currentAdminSec') || 'sec-dashboard';
         const navItems = document.querySelectorAll('.admin-nav-item');
@@ -229,7 +243,8 @@ async function loginAdmin(event) {
         }
 
         if (data.success) {
-            sessionStorage.setItem('adminLoggedIn', 'true');
+            const tokenPayload = btoa(JSON.stringify({ valid: true, timestamp: Date.now() }));
+            sessionStorage.setItem('_auth_tkn_x92', tokenPayload);
             switchView('admin-dashboard-view');
             
             document.getElementById('admin-user').value = '';
@@ -260,12 +275,14 @@ async function loginAdmin(event) {
 }
 
 function logoutAdmin() {
-    sessionStorage.removeItem('adminLoggedIn');
+    sessionStorage.removeItem('_auth_tkn_x92');
     sessionStorage.removeItem('currentAdminSec');
+    sessionStorage.removeItem('adminLoggedIn'); 
     switchView('student-view');
 }
 
 async function createAdminAccount() {
+    if(!isAuthenticated()) return;
     const user = document.getElementById('new-admin-user').value.trim();
     const pass = document.getElementById('new-admin-pass').value.trim();
     
@@ -296,6 +313,7 @@ async function createAdminAccount() {
 }
 
 async function fetchAdminAccounts() {
+    if(!isAuthenticated()) return;
     const list = document.getElementById('admin-accounts-list');
     if (!list) return;
     list.innerHTML = '<li style="padding: 10px; text-align: center;">Loading accounts...</li>';
@@ -325,6 +343,7 @@ async function fetchAdminAccounts() {
 }
 
 async function deleteAdminAccount(user) {
+    if(!isAuthenticated()) return;
     if(!confirm(`Are you sure you want to delete the account: ${user}?`)) return;
     try {
         const response = await fetch(`${API_BASE_URL}/delete-account/${user}`, { method: 'DELETE' });
@@ -335,6 +354,7 @@ async function deleteAdminAccount(user) {
 }
 
 async function generateRegistrationLink() {
+    if(!isAuthenticated()) return;
     try {
         const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
         const data = await response.json();
@@ -349,6 +369,7 @@ async function generateRegistrationLink() {
 }
 
 function copyRegLink() {
+    if(!isAuthenticated()) return;
     const linkInput = document.getElementById('reg-link-output');
     linkInput.select();
     document.execCommand("copy");
@@ -356,6 +377,7 @@ function copyRegLink() {
 }
 
 async function createStudent() {
+    if(!isAuthenticated()) return;
     const name = document.getElementById('new-student-name').value.trim();
     const idNum = document.getElementById('new-student-id').value.trim();
     const gcHandle = document.getElementById('new-student-gc').value.trim();
@@ -398,6 +420,7 @@ async function createStudent() {
 }
 
 async function updateStudentGC() {
+    if(!isAuthenticated()) return;
     const idNum = document.getElementById('edit-student-id').value.trim();
     const newGc = document.getElementById('edit-student-gc').value.trim();
 
@@ -433,6 +456,7 @@ async function updateStudentGC() {
 }
 
 function openEditStudentModal(id) {
+    if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const s = students.find(x => x.id === id);
     if (!s) return;
@@ -477,6 +501,7 @@ function closeEditStudentModal() {
 }
 
 async function saveStudentEdit() {
+    if(!isAuthenticated()) return;
     const origId = document.getElementById('edit-stu-orig-id').value;
     const name = document.getElementById('edit-stu-name').value.trim();
     const newId = document.getElementById('edit-stu-id').value.trim();
@@ -538,6 +563,7 @@ async function saveStudentEdit() {
 }
 
 async function deleteStudent(idNum) {
+    if(!isAuthenticated()) return;
     if (!confirm("Are you sure you want to remove this student? This will not delete their existing logs but will prevent them from logging in.")) return;
     
     await pullFromCloud();
@@ -564,6 +590,7 @@ async function deleteStudent(idNum) {
 }
 
 async function toggleStudentDay(id, day) {
+    if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => s.id === id);
     
@@ -619,6 +646,7 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
 }
 
 async function deleteLog(originalIndex) {
+    if(!isAuthenticated()) return;
     if (!confirm("Delete this attendance record?")) return;
     
     await pullFromCloud();
@@ -635,6 +663,7 @@ async function deleteLog(originalIndex) {
 }
 
 function deleteHistoryDate(dateStr, event) {
+    if(!isAuthenticated()) return;
     if (event) event.stopPropagation(); 
     
     if(confirm(`⚠️ WARNING ⚠️\n\nAre you sure you want to completely delete ALL attendance logs for ${dateStr}?\n\nThis will permanently remove this day from the students' Performance Stats.`)) {
@@ -659,6 +688,7 @@ function deleteHistoryDate(dateStr, event) {
 }
 
 function toggleExempt(idNum, dateStr, checkbox) {
+    if(!isAuthenticated()) return;
     if (checkbox.checked) {
         pendingExemptId = idNum;
         pendingExemptDate = dateStr;
@@ -682,6 +712,7 @@ function closeExemptModal() {
 }
 
 async function applyExempt(type) {
+    if(!isAuthenticated()) return;
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -734,6 +765,7 @@ async function applyExempt(type) {
 }
 
 async function removeExemptions(idNum, dateStr) {
+    if(!isAuthenticated()) return;
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
@@ -755,6 +787,7 @@ async function removeExemptions(idNum, dateStr) {
 }
 
 async function exemptAllForDate(dateStr) {
+    if(!isAuthenticated()) return;
     const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Excepted.\n\nTo confirm, type exactly:\nExcepted Everyone`);
     
     if (verificationText === "Excepted Everyone") {
@@ -808,6 +841,7 @@ async function exemptAllForDate(dateStr) {
 }
 
 async function devClearLogs() {
+    if(!isAuthenticated()) return;
     if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
         await pushLogsToCloud(); 
@@ -1153,6 +1187,7 @@ function enforceHistoryLimit() {
 }
 
 function renderStudents() {
+    if(!isAuthenticated()) return;
     const list = document.getElementById('registered-students-list');
     if (!list) return;
     
@@ -1226,6 +1261,12 @@ function togglePortal() {
 }
 
 async function switchView(viewId) {
+    if (viewId === 'admin-dashboard-view' && !isAuthenticated()) {
+        alert("Security Violation: Unauthorized access attempt blocked.");
+        logoutAdmin();
+        return;
+    }
+
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
     const targetView = document.getElementById(viewId);
     if(targetView) targetView.classList.add('active');
@@ -1280,6 +1321,7 @@ async function switchView(viewId) {
 }
 
 function switchAdminSection(sectionId, navElement) {
+    if(!isAuthenticated()) return;
     document.querySelectorAll('.admin-section').forEach(sec => sec.classList.remove('active'));
     const sec = document.getElementById(sectionId);
     if(sec) sec.classList.add('active');
@@ -1342,6 +1384,7 @@ function handleGlobalSearch() {
 }
 
 function renderLogs() {
+    if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const tbody = document.getElementById('attendance-logs-body');
@@ -1396,6 +1439,7 @@ function renderLogs() {
 }
 
 function renderDutyToday() {
+    if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dutyList = document.getElementById('duty-today-list');
@@ -1440,6 +1484,7 @@ function renderDutyToday() {
 }
 
 function exportToExcel(dateStr = null) {
+    if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const shift = getShiftDateDetails();
@@ -1524,6 +1569,7 @@ function exportToExcel(dateStr = null) {
 }
 
 async function recordToGoogleSheets(dateStr) {
+    if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const targetLogs = logs.filter(l => l.date === dateStr);
@@ -1703,6 +1749,7 @@ async function resetStudentUI() {
 }
 
 function renderSchedule() {
+    if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const tbody = document.getElementById('schedule-logs-body');
     
@@ -1780,6 +1827,7 @@ function renderSchedule() {
 }
 
 function renderHistoryView() {
+    if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     let uniqueDates = [...new Set(logs.map(l => l.date))];
     
@@ -1822,6 +1870,7 @@ function renderHistoryView() {
 }
 
 function renderHistoryTable(dateStr) {
+    if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dayLogs = logs.filter(l => l.date === dateStr);
     
@@ -1973,6 +2022,7 @@ function resetDevSettings() {
 }
 
 function renderMainDashboard() {
+    if(!isAuthenticated()) return;
     try {
         const students = JSON.parse(localStorage.getItem('students')) || [];
         const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
@@ -2128,6 +2178,7 @@ function renderMainDashboard() {
 }
 
 function renderDashboardSummary() {
+    if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const tbody = document.getElementById('summary-body');
@@ -2703,6 +2754,7 @@ async function isIncognito() {
 }
 
 function factoryReset() {
+    if(!isAuthenticated()) return;
     const firstConfirm = confirm("⚠️ DANGER ⚠️\n\nThis will permanently delete ALL registered students, attendance logs, custom UI settings, and custom Admin accounts.\n\nAre you absolutely sure you want to do this?");
     
     if (firstConfirm) {

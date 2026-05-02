@@ -494,7 +494,6 @@ async function saveStudentEdit() {
     await pullFromCloud();
     const students = JSON.parse(localStorage.getItem('students')) || [];
     
-    // Prevent accidentally using an ID that already belongs to someone else
     if (newId !== origId && students.some(x => x.id === newId)) {
         alert("This Student ID is already in use by another student!");
         return;
@@ -504,13 +503,11 @@ async function saveStudentEdit() {
     
     if (s) {
         s.name = name;
-        s.id = newId; // Saves the new ID
+        s.id = newId; 
         s.gcHandle = gc;
         localStorage.setItem('students', JSON.stringify(students));
         await pushStudentsToCloud();
         
-        // CRITICAL FIX: If the ID changed, we MUST update all their past logs 
-        // so their performance history is not lost!
         if (origId !== newId) {
             let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
             let logsUpdated = false;
@@ -752,6 +749,59 @@ async function removeExemptions(idNum, dateStr) {
     
     renderHistoryTable(dateStr);
     renderMainDashboard();
+}
+
+async function exemptAllForDate(dateStr) {
+    const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Excepted.\n\nTo confirm, type exactly:\nExcepted Everyone`);
+    
+    if (verificationText === "Excepted Everyone") {
+        await pullFromCloud();
+        let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+        const students = JSON.parse(localStorage.getItem('students')) || [];
+
+        const dayLogs = logs.filter(l => l.date === dateStr);
+        const studentIds = [...new Set(dayLogs.map(l => l.id))];
+
+        studentIds.forEach(idNum => {
+            const s = students.find(x => x.id === idNum);
+            if (!s) return;
+
+            const existingInLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
+            const existingOutLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
+
+            logs = logs.filter(l => !(l.id === idNum && l.date === dateStr));
+
+            logs.push({
+                name: s.name,
+                id: s.id,
+                action: 'Time In (Exempted)',
+                time: 'Exempted',
+                date: dateStr,
+                details: null,
+                originalLog: existingInLog || null
+            });
+
+            logs.push({
+                name: s.name,
+                id: s.id,
+                action: 'Time Out (Exempted)',
+                time: 'Exempted',
+                date: dateStr,
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
+                originalLog: existingOutLog || null
+            });
+        });
+
+        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+        await pushLogsToCloud();
+        
+        renderHistoryTable(dateStr);
+        renderMainDashboard();
+        alert(`Successfully marked everyone as excepted for ${dateStr}!`);
+        
+    } else if (verificationText !== null) {
+        alert("Action canceled. The confirmation text did not match exactly.");
+    }
 }
 
 async function devClearLogs() {
@@ -1585,7 +1635,6 @@ function renderHistoryView() {
 
     let displayDates = uniqueDates.slice(0, 12);
 
-    // NEW: Filter dates by the search bar
     const searchInput = document.getElementById('search-history-date');
     const query = searchInput ? searchInput.value.toLowerCase() : '';
 
@@ -1625,9 +1674,12 @@ function renderHistoryTable(dateStr) {
     document.getElementById('history-table-container').style.display = 'flex';
     document.getElementById('history-table-title').textContent = `Logs for ${dateStr}`;
     
-    // Connect the buttons to the current date
     document.getElementById('history-export-btn').onclick = () => exportToExcel(dateStr);
-    document.getElementById('history-exempt-all-btn').onclick = () => exemptAllForDate(dateStr);
+    
+    const exemptAllBtn = document.getElementById('history-exempt-all-btn');
+    if (exemptAllBtn) {
+        exemptAllBtn.onclick = () => exemptAllForDate(dateStr);
+    }
     
     const tbody = document.getElementById('history-logs-body');
     tbody.innerHTML = '';
@@ -1691,8 +1743,6 @@ function renderHistoryTable(dateStr) {
         tbody.appendChild(tr);
     });
 }
-
-
 
 function initDevUI() {
     const dDate = localStorage.getItem('devDateOverride');
@@ -2444,5 +2494,58 @@ function factoryReset() {
         } else if (verificationText !== null) {
             alert("Factory Reset canceled. The text did not match exactly.");
         }
+    }
+}
+
+async function exemptAllForDate(dateStr) {
+    const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Excepted.\n\nTo confirm, type exactly:\nExcepted Everyone`);
+    
+    if (verificationText === "Excepted Everyone") {
+        await pullFromCloud();
+        let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+        const students = JSON.parse(localStorage.getItem('students')) || [];
+
+        const dayLogs = logs.filter(l => l.date === dateStr);
+        const studentIds = [...new Set(dayLogs.map(l => l.id))];
+
+        studentIds.forEach(idNum => {
+            const s = students.find(x => x.id === idNum);
+            if (!s) return;
+
+            const existingInLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
+            const existingOutLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
+
+            logs = logs.filter(l => !(l.id === idNum && l.date === dateStr));
+
+            logs.push({
+                name: s.name,
+                id: s.id,
+                action: 'Time In (Exempted)',
+                time: 'Exempted',
+                date: dateStr,
+                details: null,
+                originalLog: existingInLog || null
+            });
+
+            logs.push({
+                name: s.name,
+                id: s.id,
+                action: 'Time Out (Exempted)',
+                time: 'Exempted',
+                date: dateStr,
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
+                originalLog: existingOutLog || null
+            });
+        });
+
+        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+        await pushLogsToCloud();
+        
+        renderHistoryTable(dateStr);
+        renderMainDashboard();
+        alert(`Successfully marked everyone as excepted for ${dateStr}!`);
+        
+    } else if (verificationText !== null) {
+        alert("Action canceled. The confirmation text did not match exactly.");
     }
 }

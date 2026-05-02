@@ -244,6 +244,7 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
+    // Process previous days' rollover data strictly at 4:01 AM or later.
     if(!isSystemLocked()) {
         processPastShifts(); 
     }
@@ -2257,58 +2258,77 @@ function renderMainDashboard() {
             });
         }
 
+        // --- UPDATED DUAL-LINE CHART ---
         const timeInLogs = logs.filter(l => l.date === todayStr && l.action.includes('In') && !l.action.includes('Exempted'));
-        const hourlyCounts = new Array(24).fill(0);
+        const timeOutLogs = logs.filter(l => l.date === todayStr && l.action.includes('Out') && !l.action.includes('Exempted'));
         
-        timeInLogs.forEach(log => {
-            const timeMatch = log.time.match(/(\d+):(\d+)\s+(AM|PM)/i);
-            if (timeMatch) {
-                let h = parseInt(timeMatch[1]);
-                const ampm = timeMatch[3].toUpperCase();
-                if (ampm === 'PM' && h !== 12) h += 12;
-                if (ampm === 'AM' && h === 12) h = 0;
-                
-                let index = (h >= 5) ? (h - 5) : (h + 19);
-                if (index >= 0 && index < 24) {
-                    hourlyCounts[index]++;
+        const hourlyInCounts = new Array(24).fill(0);
+        const hourlyOutCounts = new Array(24).fill(0);
+        
+        function populateCounts(targetLogs, arr) {
+            targetLogs.forEach(log => {
+                if(log.time === 'Exempted') return;
+                const timeMatch = log.time.match(/(\d+):(\d+)\s+(AM|PM)/i);
+                if (timeMatch) {
+                    let h = parseInt(timeMatch[1]);
+                    const ampm = timeMatch[3].toUpperCase();
+                    if (ampm === 'PM' && h !== 12) h += 12;
+                    if (ampm === 'AM' && h === 12) h = 0;
+                    
+                    let index = (h >= 5) ? (h - 5) : (h + 19);
+                    if (index >= 0 && index < 24) {
+                        arr[index]++;
+                    }
                 }
-            }
-        });
+            });
+        }
+        
+        populateCounts(timeInLogs, hourlyInCounts);
+        populateCounts(timeOutLogs, hourlyOutCounts);
 
-        const maxLineVal = Math.max(...hourlyCounts, 5);
+        const maxLineVal = Math.max(...hourlyInCounts, ...hourlyOutCounts, 5);
         const lineChartContainer = document.getElementById('dash-line-chart-container');
         if (lineChartContainer) {
-            let svgHTML = `<svg width="100%" height="100%" viewBox="-10 -15 260 130" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
+            let svgHTML = `<svg width="100%" height="100%" viewBox="-10 -20 260 140" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
             
-            [0, 50, 100].forEach(y => {
-                svgHTML += `<line x1="0" y1="${y}" x2="240" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
-            });
-            
-            let points = [];
-            hourlyCounts.forEach((count, i) => {
+            let inPoints = [];
+            hourlyInCounts.forEach((count, i) => {
                 let x = (i / 23) * 240;
                 let y = 100 - ((count / maxLineVal) * 100);
-                points.push(`${x},${y}`);
+                inPoints.push(`${x},${y}`);
+            });
+
+            let outPoints = [];
+            hourlyOutCounts.forEach((count, i) => {
+                let x = (i / 23) * 240;
+                let y = 100 - ((count / maxLineVal) * 100);
+                outPoints.push(`${x},${y}`);
             });
             
-            let areaPoints = `0,100 ${points.join(' ')} 240,100`;
-            svgHTML += `<defs>
-                <linearGradient id="lineGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stop-color="var(--accent)"/>
-                    <stop offset="100%" stop-color="transparent"/>
-                </linearGradient>
-            </defs>`;
-            svgHTML += `<polygon points="${areaPoints}" fill="url(#lineGradient)" opacity="0.3" />`;
-            svgHTML += `<polyline points="${points.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" />`;
+            // Draw Lines
+            svgHTML += `<polyline points="${outPoints.join(' ')}" fill="none" stroke="var(--error)" stroke-width="2.5" />`;
+            svgHTML += `<polyline points="${inPoints.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" />`;
             
-            hourlyCounts.forEach((count, i) => {
+            // Draw Out Circles and Text (Below line)
+            hourlyOutCounts.forEach((count, i) => {
+                let x = (i / 23) * 240;
+                let y = 100 - ((count / maxLineVal) * 100);
+                svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--error)" stroke-width="1.5" />`;
+                if (count > 0) {
+                    svgHTML += `<text x="${x}" y="${y + 12}" fill="var(--error)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
+                }
+            });
+
+            // Draw In Circles and Text (Above line)
+            hourlyInCounts.forEach((count, i) => {
                 let x = (i / 23) * 240;
                 let y = 100 - ((count / maxLineVal) * 100);
                 svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--accent)" stroke-width="1.5" />`;
                 if (count > 0) {
-                    svgHTML += `<text x="${x}" y="${y - 8}" fill="var(--text-main)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
+                    svgHTML += `<text x="${x}" y="${y - 8}" fill="var(--accent)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
                 }
             });
+
             svgHTML += `</svg>`;
             
             let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 10px; color: var(--text-muted); font-size: 10px; padding: 0 5px;">`;

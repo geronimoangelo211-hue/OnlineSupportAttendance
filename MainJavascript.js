@@ -1652,23 +1652,23 @@ async function recordToGoogleSheets(dateStr) {
     try {
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8', 
+            },
             body: JSON.stringify(payload)
         });
 
-        const textResponse = await response.text();
-        try {
-            const result = JSON.parse(textResponse);
-            if (result.success) {
-                alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
-            } else {
-                alert(`Error from sheet: ${result.error}`);
-            }
-        } catch(e) {
+        const result = await response.json();
+        
+        if (result.success) {
             alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
+        } else {
+            alert(`Error from sheet: ${result.error}`);
         }
+        
     } catch (error) {
         console.error("Error sending to Google Sheets:", error);
-        alert("Network error trying to contact Google Sheets. Did you deploy a NEW VERSION in Apps Script?");
+        alert("Network error trying to contact Google Sheets. Please ensure you deployed the New Version in Apps Script.");
     } finally {
         if (sheetBtn) {
             sheetBtn.textContent = originalText;

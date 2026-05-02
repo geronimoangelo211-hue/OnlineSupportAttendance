@@ -23,6 +23,14 @@ async function pullFromCloud() {
 
             if (cloudStudents.length > 0) {
                 localStorage.setItem('students', JSON.stringify(cloudStudents));
+                
+                // NEW: Cloud Synchronization for System Lock
+                const configStu = cloudStudents.find(s => s.id === 'SYS_CONFIG_X99');
+                if (configStu && configStu.isLocked !== undefined) {
+                    localStorage.setItem('attendance_closed', configStu.isLocked ? 'true' : 'false');
+                    checkSystemLockStatus(); // Apply lock immediately if another device triggered it
+                }
+
             } else if (localStudents.length > 0) {
                 await pushStudentsToCloud();
             }
@@ -74,31 +82,42 @@ let pendingExemptId = null;
 let pendingExemptDate = null;
 let pendingExemptCheckbox = null;
 
-// --- ATTENDANCE SYSTEM LOCK LOGIC ---
+// --- ATTENDANCE SYSTEM LOCK LOGIC (CLOUD SYNCED) ---
 function isSystemLocked() {
     return localStorage.getItem('attendance_closed') === 'true';
 }
 
 function toggleAttendanceState(elem) {
-    const knob = document.getElementById('sys-toggle-knob');
-    if (elem.checked) {
-        localStorage.setItem('attendance_closed', 'true');
-        if(knob) {
-            knob.style.transform = 'translateX(20px)';
-            knob.parentElement.style.backgroundColor = 'var(--error)';
-        }
+    const isClosed = elem.checked;
+    localStorage.setItem('attendance_closed', isClosed ? 'true' : 'false');
+    
+    // Inject lock state into a hidden system profile to sync to the cloud database
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    let configIndex = students.findIndex(s => s.id === 'SYS_CONFIG_X99');
+    
+    if (configIndex === -1) {
+        students.push({ id: 'SYS_CONFIG_X99', name: 'SYSTEM_SETTINGS', assignedDays: [], gcHandle: 'SYS', isLocked: isClosed });
     } else {
-        localStorage.setItem('attendance_closed', 'false');
-        if(knob) {
-            knob.style.transform = 'translateX(0px)';
-            knob.parentElement.style.backgroundColor = '#334155';
-        }
+        students[configIndex].isLocked = isClosed;
     }
+    
+    localStorage.setItem('students', JSON.stringify(students));
+    pushStudentsToCloud(); // Immediately push lock command to cloud
+
     checkSystemLockStatus();
 }
 
 function checkSystemLockStatus() {
     const isLocked = isSystemLocked();
+    
+    // Auto-update the knob UI in case it was locked by another device remotely
+    const lockToggle = document.getElementById('sys-attendance-toggle');
+    const lockKnob = document.getElementById('sys-toggle-knob');
+    if(lockToggle && lockKnob) {
+        lockToggle.checked = isLocked;
+        lockKnob.style.transform = isLocked ? 'translateX(20px)' : 'translateX(0px)';
+        lockKnob.parentElement.style.backgroundColor = isLocked ? 'var(--error)' : '#334155';
+    }
     
     const studentLockOverlay = document.getElementById('student-lock-overlay');
     if (studentLockOverlay) {
@@ -195,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(form) form.style.display = 'none';
             if(locked) locked.style.display = 'none';
             if(sysLock) sysLock.style.display = 'none';
-            if(incognito) incognito.style.display = 'flex'; // Uses flex to perfectly cover screen
+            if(incognito) incognito.style.display = 'flex';
         }
     });
 
@@ -263,6 +282,7 @@ setInterval(async () => {
     }
 }, 15000);
 
+// --- UNIFIED SHIFT ROLLOVER & AUTO-LOGGING SYSTEM (WITH GHOST PREVENTION) ---
 function processPastShifts() {
     if(isSystemLocked()) return false;
 
@@ -278,6 +298,7 @@ function processPastShifts() {
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99'); // Exclude hidden config
     const deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || []; 
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -290,7 +311,7 @@ function processPastShifts() {
 
         if (deletedDates.includes(checkDateStr)) continue;
 
-        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
+        const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
         
         scheduledStudents.forEach(student => {
             const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
@@ -840,9 +861,9 @@ function deleteHistoryDate(dateStr, event) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         logs = logs.filter(l => l.date !== dateStr);
-        
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
 
+        // Adds to permanent blacklist so the auto-scanner ignores it forever
         let deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || [];
         if (!deletedDates.includes(dateStr)) {
             deletedDates.push(dateStr);
@@ -1020,7 +1041,7 @@ async function devClearLogs() {
     if(!isAuthenticated()) return;
     if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
-        localStorage.setItem('deletedDates', JSON.stringify([])); // clear blacklist too
+        localStorage.setItem('deletedDates', JSON.stringify([])); 
         await pushLogsToCloud(); 
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -1199,7 +1220,6 @@ async function handleTimeOut() {
         } 
 
         pendingTimeOutStudent = student;
-        // Shift hour 0-3 and exactly 4:00 AM evaluates as Late for the previous day. 
         pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
         pendingTimeOutDate = shift.dateStr; 
         
@@ -1523,6 +1543,7 @@ function renderLogs() {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const tbody = document.getElementById('attendance-logs-body');
     
     const searchInput = document.getElementById('search-attendance-global');
@@ -1537,7 +1558,7 @@ function renderLogs() {
     const logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
 
     logsWithIndex.reverse().filter(log => {
-        const student = students.find(s => s.id === log.id);
+        const student = validStudents.find(s => s.id === log.id);
         const isScheduledToday = student && student.assignedDays && student.assignedDays.includes(currentDay);
         
         return log.date === todayStr &&
@@ -1577,6 +1598,7 @@ function renderLogs() {
 function renderDutyToday() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dutyList = document.getElementById('duty-today-list');
     if (!dutyList) return;
@@ -1585,7 +1607,7 @@ function renderDutyToday() {
     const currentDay = shift.dayStr;
     const todayStr = shift.dateStr;
 
-    const scheduledToday = students.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
+    const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
     scheduledToday.sort((a, b) => a.name.localeCompare(b.name));
 
     dutyList.innerHTML = '';
@@ -1623,6 +1645,7 @@ function exportToExcel(dateStr = null) {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const shift = getShiftDateDetails();
     const targetDate = dateStr || shift.dateStr;
     const targetLogs = logs.filter(l => l.date === targetDate);
@@ -1631,7 +1654,7 @@ function exportToExcel(dateStr = null) {
         ["NAME", "ID NUMBER", "TIME IN", "TIME OUT", "DATE", "GC HANDLE", "ANNOUNCEMENT", "POSTED BY"]
     ];
 
-    const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
@@ -1708,9 +1731,10 @@ async function recordToGoogleSheets(dateStr) {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const targetLogs = logs.filter(l => l.date === dateStr);
 
-    if (students.length === 0) {
+    if (validStudents.length === 0) {
         alert("No registered students found.");
         return;
     }
@@ -1725,7 +1749,7 @@ async function recordToGoogleSheets(dateStr) {
     }
 
     const payload = [];
-    const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
@@ -1904,6 +1928,7 @@ async function resetStudentUI() {
 function renderSchedule() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const tbody = document.getElementById('schedule-logs-body');
     
     const searchInput = document.getElementById('search-schedule');
@@ -1920,7 +1945,7 @@ function renderSchedule() {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const dayLabels = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
     
-    let filteredStudents = students.filter(student => 
+    let filteredStudents = validStudents.filter(student => 
         (student.name && student.name.toLowerCase().includes(query)) || 
         (student.id && student.id.toLowerCase().includes(query)) ||
         (student.gcHandle && student.gcHandle.toLowerCase().includes(query))
@@ -2181,15 +2206,16 @@ function renderMainDashboard() {
     if(!isAuthenticated()) return;
     try {
         const students = JSON.parse(localStorage.getItem('students')) || [];
+        const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
         const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         const shift = getShiftDateDetails();
         const todayStr = shift.dateStr;
         const currentDay = shift.dayStr;
 
         const dashTotal = document.getElementById('dash-total');
-        if(dashTotal) dashTotal.textContent = students.length;
+        if(dashTotal) dashTotal.textContent = validStudents.length;
 
-        const scheduledToday = students.filter(s => s.assignedDays && s.assignedDays.includes(currentDay));
+        const scheduledToday = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(currentDay));
         const totalScheduled = scheduledToday.length;
 
         let presentCount = 0;
@@ -2274,7 +2300,7 @@ function renderMainDashboard() {
 
             let deadCount = 0;
 
-            students.forEach(student => {
+            validStudents.forEach(student => {
                 const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= cutoffDate);
                 if (!recentLog) {
                     deadCount++;
@@ -2291,7 +2317,7 @@ function renderMainDashboard() {
 
         let perfList = [];
 
-        students.forEach(student => {
+        validStudents.forEach(student => {
             const studentLogs = logs.filter(l => l.id === student.id);
             if (studentLogs.length === 0) return;
 
@@ -2363,6 +2389,7 @@ function renderMainDashboard() {
 function renderDashboardSummary() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const tbody = document.getElementById('summary-body');
     
@@ -2376,7 +2403,7 @@ function renderDashboardSummary() {
     const todayStr = shift.dateStr;
     const currentDay = shift.dayStr;
 
-    const scheduledToday = students.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
+    const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
 
     const filteredStudents = scheduledToday.filter(student => 
         student.name.toLowerCase().includes(query) || 

@@ -456,6 +456,23 @@
                         </div>
                     </div>
 
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #2d313c;">
+                        <h4 style="color: var(--text-main); margin-bottom: 15px;">System Controls</h4>
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: #1e2128; padding: 15px; border-radius: 8px;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="color: var(--text-main); font-weight: bold; font-size: 14px;">Lock Attendance System</span>
+                                <span style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">If turned ON, students cannot Time In or Time Out.</span>
+                            </div>
+                            
+                            <label style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                                <input type="checkbox" id="sys-attendance-toggle" onchange="toggleAttendanceState(this)" style="opacity: 0; width: 0; height: 0;">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 34px;">
+                                    <span id="sys-toggle-knob" style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
                 </div>
             </div>
             

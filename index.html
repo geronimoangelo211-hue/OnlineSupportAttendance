@@ -30,10 +30,9 @@
             margin: 0;
         }
         
-        /* Fixed: Panels grow downward to remove internal scrollbars */
+        /* Fixed: Panels are now strict rectangles to prevent screen overflow */
         .dash-panel-bottom-row {
-            min-height: 250px;
-            height: auto; 
+            height: 300px; 
             display: flex;
             flex-direction: column;
         }
@@ -63,6 +62,7 @@
     </header>
 
     <main id="student-view" class="view active" style="position: relative;">
+        <!-- New System Locked Overlay -->
         <div id="student-lock-overlay" class="system-locked-overlay" style="display: none;">
             <span style="font-size: 4rem; margin-bottom: 10px;">🔒</span>
             <h2 class="locked-text">Attendance is Closed</h2>
@@ -203,7 +203,7 @@
                                 </div>
                             </div>
                             
-                            <!-- UPDATED: Best Performance Panel (Single Name layout, centered, removes scroll) -->
+                            <!-- UPDATED: Best Performance Panel (Single Name layout, centered, NO scrollbar, strict height) -->
                             <div class="panel dash-panel-bottom-row">
                                 <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 5px; text-align: left;">
                                     <h3 style="margin: 0;">Best Performance</h3>
@@ -219,12 +219,11 @@
                             </div>
                         </div>
 
-                        <!-- UPDATED: Dead Students Alert (Panel grows dynamically to fit all names) -->
+                        <!-- UPDATED: Dead Students Alert (Fixed Size WITH Scrollbar inside the list) -->
                         <div class="panel dash-panel-bottom-row">
                             <h3 style="margin-top: 0;">Dead Students Alert</h3>
                             <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
-                            <!-- Removed overflow-y: auto so it naturally pushes the container height down -->
-                            <div id="dash-dead-students" style="flex: 1; display: flex; flex-direction: column; gap: 8px;"></div>
+                            <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
                         </div>
 
                     </div>
@@ -516,7 +515,6 @@
                             <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY LINK TO CLIPBOARD</button>
                         </div>
 
-                        <!-- System Controls positioned correctly -->
                         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #2d313c;">
                             <h4 style="color: var(--text-main); margin-bottom: 15px;">System Controls</h4>
                             <div style="display: flex; align-items: center; justify-content: space-between; background: #1e2128; padding: 15px; border-radius: 8px;">

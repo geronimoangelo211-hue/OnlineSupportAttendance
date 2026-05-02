@@ -1,4 +1,64 @@
-const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
+function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    var existingData = sheet.getDataRange().getValues();
+    
+    for (var i = 0; i < data.length; i++) {
+      var rowObj = data[i];
+      var targetDate = rowObj.date;
+      var targetId = rowObj.id;
+      var rowIndex = -1;
+      
+      for (var j = 1; j < existingData.length; j++) {
+        if (existingData[j][1].toString() === targetId.toString() && existingData[j][4].toString() === targetDate.toString()) {
+          rowIndex = j + 1; 
+          break;
+        }
+      }
+      
+      var newRow = [
+        rowObj.name,
+        rowObj.id,
+        rowObj.timeIn,
+        rowObj.timeOut,
+        rowObj.date,
+        rowObj.gcHandle,
+        rowObj.announcement,
+        rowObj.postedBy
+      ];
+      
+      if (rowIndex > -1) {
+        sheet.getRange(rowIndex, 1, 1, newRow.length).setValues([newRow]);
+      } else {
+        sheet.appendRow(newRow);
+      }
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+      
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+  }
+}
+
+function doOptions(e) {
+  return ContentService.createTextOutput("")
+    .setHeader("Access-Control-Allow-Origin", "*")
+    .setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+Perfect! I have injected your exact Google Apps Script URL into the JavaScript.
+
+Because your Google Workspace domain is `phinmaed.com`, **please double-check one critical setting in your Apps Script deployment**: When you deployed the Web App, make sure **"Who has access"** is set strictly to **"Anyone"**. If it is set to "Anyone within phinmaed.com", Google will block your Vercel website from sending the data!
+
+Here is your absolute final, completely updated **`MainJavascript.js`** file with the URL securely embedded and zero comments.
+
+### 1. `MainJavascript.js`
+```javascript
+const API_BASE_URL = "[https://support-backend-ldos.onrender.com/api](https://support-backend-ldos.onrender.com/api)";
 
 async function pullFromCloud() {
     try {
@@ -339,7 +399,7 @@ async function generateRegistrationLink() {
         const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
         const data = await response.json();
         
-        const link = `https://os-register.vercel.app/?token=${data.token}`;
+        const link = `[https://os-register.vercel.app/?token=$](https://os-register.vercel.app/?token=$){data.token}`;
         
         document.getElementById('reg-link-container').style.display = 'block';
         document.getElementById('reg-link-output').value = link;
@@ -1560,7 +1620,7 @@ async function recordToGoogleSheets(dateStr) {
         });
     });
 
-    const GOOGLE_SCRIPT_URL = "YOUR_WEB_APP_URL_HERE";
+    const GOOGLE_SCRIPT_URL = "[https://script.google.com/a/macros/phinmaed.com/s/AKfycbxvWsoWHaCDcmkIG4xn_CSneippJsflZe1oQBciplMiNNCuwvJj0ibiTmuHg2ojDNWA/exec](https://script.google.com/a/macros/phinmaed.com/s/AKfycbxvWsoWHaCDcmkIG4xn_CSneippJsflZe1oQBciplMiNNCuwvJj0ibiTmuHg2ojDNWA/exec)";
 
     try {
         const response = await fetch(GOOGLE_SCRIPT_URL, {
@@ -2323,7 +2383,7 @@ function initSliderCaptcha() {
 
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.src = `https://picsum.photos/${Math.floor(width)}/${Math.floor(height)}?random=${Math.random()}`;
+    img.src = `[https://picsum.photos/$](https://picsum.photos/$){Math.floor(width)}/${Math.floor(height)}?random=${Math.random()}`;
     
     img.onload = () => {
         bgCtx.clearRect(0, 0, width, height);

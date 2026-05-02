@@ -30,18 +30,21 @@
             margin: 0;
         }
         
-        /* Fixed heights for dashboard bottom panels to align them perfectly */
+        /* Fixed: Panels grow downward to remove internal scrollbars */
         .dash-panel-bottom-row {
-            height: 250px; 
+            min-height: 250px;
+            height: auto; 
             display: flex;
             flex-direction: column;
         }
         .best-perf-content {
             flex: 1;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            padding: 10px 0;
+            justify-content: center;
+            padding: 20px 0;
+            text-align: center;
         }
     </style>
 </head>
@@ -60,7 +63,6 @@
     </header>
 
     <main id="student-view" class="view active" style="position: relative;">
-        <!-- New System Locked Overlay -->
         <div id="student-lock-overlay" class="system-locked-overlay" style="display: none;">
             <span style="font-size: 4rem; margin-bottom: 10px;">🔒</span>
             <h2 class="locked-text">Attendance is Closed</h2>
@@ -201,30 +203,28 @@
                                 </div>
                             </div>
                             
-                            <!-- UPDATED: Best Performance Panel (Fixed Size, NO Scrollbar) -->
+                            <!-- UPDATED: Best Performance Panel (Single Name layout, centered, removes scroll) -->
                             <div class="panel dash-panel-bottom-row">
-                                <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 15px;">
+                                <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 5px; text-align: left;">
                                     <h3 style="margin: 0;">Best Performance</h3>
                                     <p class="placeholder-text" style="margin-top: 5px; margin-bottom: 0;">Highest overall accuracy rate across all shifts.</p>
                                 </div>
                                 <div class="best-perf-content" id="dash-best-perf-container">
-                                    <div style="display: flex; flex-direction: column;">
-                                        <div id="dash-best-perf-name" style="font-size: 1.5rem; color: var(--text-main); font-weight: bold;">TBD</div>
-                                        <div id="dash-best-perf-id" style="font-size: 0.9rem; color: var(--text-muted); margin-top: 5px;">ID: --</div>
-                                    </div>
-                                    <div id="dash-best-perf-rate" style="font-size: 2.2rem; color: var(--accent); font-weight: bold; text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.3);">
+                                    <div id="dash-best-perf-name" style="font-size: 1.8rem; color: var(--text-main); font-weight: bold;">TBD</div>
+                                    <div id="dash-best-perf-id" style="font-size: 1rem; color: var(--text-muted); margin-top: 5px;">ID: --</div>
+                                    <div id="dash-best-perf-rate" style="font-size: 3.5rem; color: var(--accent); font-weight: bold; margin-top: 15px; text-shadow: 0 0 15px rgba(var(--accent-rgb), 0.4);">
                                         0%
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- UPDATED: Dead Students Alert (Fixed Size WITH Scrollbar) -->
+                        <!-- UPDATED: Dead Students Alert (Panel grows dynamically to fit all names) -->
                         <div class="panel dash-panel-bottom-row">
                             <h3 style="margin-top: 0;">Dead Students Alert</h3>
                             <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
-                            <!-- ONLY THIS INNER DIV HAS THE SCROLLBAR -->
-                            <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
+                            <!-- Removed overflow-y: auto so it naturally pushes the container height down -->
+                            <div id="dash-dead-students" style="flex: 1; display: flex; flex-direction: column; gap: 8px;"></div>
                         </div>
 
                     </div>
@@ -234,7 +234,6 @@
             <div id="sec-attendance" class="admin-section">
                 <div class="panel" style="background: #16181d; padding: 40px 30px; height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 20px; border-radius: 0; border: none; box-shadow: none; position: relative;">
                     
-                    <!-- Admin Live Attendance Lock Overlay -->
                     <div id="admin-live-lock-overlay" class="system-locked-overlay" style="display: none; border-radius: 0;">
                         <span style="font-size: 3rem; margin-bottom: 10px;">🔒</span>
                         <h2 class="locked-text" style="font-size: 1.5rem;">System is Locked</h2>
@@ -517,7 +516,7 @@
                             <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY LINK TO CLIPBOARD</button>
                         </div>
 
-                        <!-- System Controls moved directly below the self-registration block -->
+                        <!-- System Controls positioned correctly -->
                         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #2d313c;">
                             <h4 style="color: var(--text-main); margin-bottom: 15px;">System Controls</h4>
                             <div style="display: flex; align-items: center; justify-content: space-between; background: #1e2128; padding: 15px; border-radius: 8px;">

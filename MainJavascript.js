@@ -1647,7 +1647,7 @@ async function recordToGoogleSheets(dateStr) {
         });
     });
 
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyewbogek6fmrmlSv9J55daO_bsSsjnBBkvg2BV6bmnKW_MW2JailxtNYo6QIMY77D6/exec";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
     try {
         const response = await fetch(GOOGLE_SCRIPT_URL, {

@@ -244,7 +244,6 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
-    // Process previous days' rollover data strictly at 4:01 AM or later.
     if(!isSystemLocked()) {
         processPastShifts(); 
     }
@@ -2335,7 +2334,7 @@ function renderMainDashboard() {
                 const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= cutoffDate);
                 if (!recentLog) {
                     deadCount++;
-                    deadStudentsList.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center;">
+                    deadStudentsList.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
                         <span style="color: var(--text-main); font-size: 13px;">${student.name}</span> 
                         <span style="color:var(--error); font-weight: bold; font-size: 10px;">INACTIVE</span>
                     </div>`;
@@ -2346,7 +2345,6 @@ function renderMainDashboard() {
             }
         }
 
-        // --- UPDATED: Top 10 Best Performance Array Logic ---
         let perfList = [];
 
         students.forEach(student => {
@@ -2400,7 +2398,7 @@ function renderMainDashboard() {
                     else rankBadge = `<span style="display:inline-block; width:20px; text-align:center; font-weight:bold; color:var(--text-muted); font-size:11px;">#${index+1}</span>`;
 
                     bestPerfEl.innerHTML += `
-                        <div style="padding: 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; background: rgba(0,0,0,0.2);">
+                        <div style="padding: 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; background: rgba(0,0,0,0.2); flex-shrink: 0;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 ${rankBadge}
                                 <div style="display: flex; flex-direction: column;">

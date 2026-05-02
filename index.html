@@ -10,7 +10,7 @@
 <body>
 
     <header id="main-header" class="desktop-header">
-        <h2>Online Support Attendance</h2>
+        <h2>Support Attendance System</h2>
         <nav>
             <button onclick="togglePortal()" class="portal-toggle-btn">Support Head Portal</button>
         </nav>
@@ -52,14 +52,12 @@
             <p id="student-message" class="message"></p>
         </div>
 
-        <!-- Locked Screen (Missed Shift / Auto-Closed) -->
         <div class="centered-panel" id="locked-screen" style="display: none;">
             <h3 style="color: var(--error);">Shift Closed</h3>
             <p id="locked-message" style="color: var(--text-muted); margin-top: 10px;"></p>
             <button class="btn-primary" onclick="resetStudentUI()" style="margin-top: 25px;">Acknowledge</button>
         </div>
 
-        <!-- Incognito Mode Warning Screen -->
         <div class="centered-panel" id="incognito-screen" style="display: none; border-color: var(--error);">
             <h3 style="color: var(--error); margin-top: 0; border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 10px;">Private Browsing Detected</h3>
             <p style="color: var(--text-muted); margin-top: 15px;">Please switch to a normal browser window to log your attendance.</p>
@@ -67,16 +65,12 @@
         </div>
     </main>
 
-    <!-- ========================================== -->
-    <!-- 2. ADMIN LOGIN VIEW                        -->
-    <!-- ========================================== -->
     <main id="admin-login-view" class="view">
         <div class="centered-panel">
             <h3>Support Head Login</h3>
             <input type="text" id="admin-user" placeholder="Username">
             <input type="password" id="admin-pass" placeholder="Password">
             
-            <!-- ADMIN CAPTCHA -->
             <div class="captcha-container" style="margin-top: 15px; margin-bottom: 15px;">
                 <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">Security Check (Case Sensitive - Click image to refresh)</p>
                 <canvas id="admin-captcha-canvas" width="250" height="70" style="background: #121419; border: 1px solid #333a45; border-radius: 6px; cursor: pointer; width: 100%;"></canvas>
@@ -88,12 +82,8 @@
         </div>
     </main>
 
-    <!-- ========================================== -->
-    <!-- 3. ADMIN DASHBOARD VIEW                    -->
-    <!-- ========================================== -->
     <main id="admin-dashboard-view" class="view">
         
-        <!-- Sidebar / Top Navbar -->
         <div class="admin-navbar-container">
             <div class="admin-navbar">
                 <div class="admin-brand">Support Head</div>
@@ -111,13 +101,11 @@
 
         <div class="admin-content-area">
             
-            <!-- SECTION: MAIN DASHBOARD -->
             <div id="sec-dashboard" class="admin-section active">
                 <div style="display: flex; flex-direction: column; gap: 30px; height: 100%; overflow-y: auto; padding-right: 15px;">
                     
                     <h2 style="margin: 0; color: var(--text-main);">Today's Analytics</h2>
 
-                    <!-- Top Metrics Grid -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                         <div class="dash-card">
                             <h4>Students Scheduled Today</h4>
@@ -150,9 +138,7 @@
                         
                         <div style="display: flex; flex-direction: column; gap: 30px;">
                             
-                            <!-- Charts Row: Pie + Bar -->
                             <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
-                                <!-- Pie Chart -->
                                 <div class="panel" style="min-height: 300px; padding: 25px;">
                                     <h3 style="margin-top: 0; margin-bottom: 0; text-align: left;">Attendance Breakdown</h3>
                                     <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 15px;">
@@ -164,19 +150,15 @@
                                     </div>
                                 </div>
 
-                                <!-- Weekly Bar Chart -->
                                 <div class="panel" style="min-height: 300px; padding: 25px;">
                                     <h3 style="margin-top: 0; margin-bottom: 15px; text-align: left;">Students Attendance in a Week</h3>
                                     <div id="dash-bar-chart" style="flex: 1; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding-top: 20px; border-bottom: 1px solid #2d313c; min-height: 150px;">
-                                        <!-- Bars inject here -->
                                     </div>
                                     <div id="dash-bar-labels" style="display: flex; justify-content: space-around; margin-top: 10px; color: var(--text-muted); font-size: 11px;">
-                                        <!-- Labels inject here -->
                                     </div>
                                 </div>
                             </div>
                             
-                            <!-- Best Performance Row -->
                             <div class="panel" style="flex-direction: row; align-items: center; justify-content: space-between; min-height: 120px;">
                                 <div>
                                     <h3 style="border: none; margin: 0; padding: 0;">Best Performance</h3>
@@ -188,7 +170,6 @@
                             </div>
                         </div>
 
-                        <!-- Right Side: Dead Students List -->
                         <div class="panel" style="min-height: 400px;">
                             <h3 style="margin-top: 0;">Dead Students Alert</h3>
                             <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO attendance logs in the last 12 days.</p>
@@ -199,7 +180,6 @@
                 </div>
             </div>
 
-            <!-- SECTION: STUDENTS ATTENDANCE (Live Logs) -->
             <div id="sec-attendance" class="admin-section">
                 <div class="panel" style="background: #16181d; padding: 40px 30px; height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 20px; border-radius: 0; border: none; box-shadow: none;">
                     
@@ -267,7 +247,6 @@
                 </div>
             </div>
 
-            <!-- SECTION: STUDENTS DATA -->
             <div id="sec-data" class="admin-section">
                 <div class="dashboard-grid-layout" style="display: flex; flex-direction: row; gap: 30px; flex: 1; align-items: stretch;">
 
@@ -334,7 +313,6 @@
                 </div>
             </div>
 
-            <!-- SECTION: STUDENTS SCHEDULE -->
             <div id="sec-schedule" class="admin-section">
                 <div class="panel" style="display: flex; flex-direction: column; height: 100%;">
                     <h3 style="margin-top: 0;">Students Schedule Assignment</h3>
@@ -376,7 +354,6 @@
                 </div>
             </div>
 
-            <!-- SECTION: HISTORY -->
             <div id="sec-history" class="admin-section">
                 <div class="panel" style="flex: 1;">
                     <h3>Attendance History (12-Day Auto Delete)</h3>
@@ -411,11 +388,9 @@
                 </div>
             </div>
 
-            <!-- SECTION: SETTINGS -->
             <div id="sec-settings" class="admin-section">
                 <div style="display: flex; gap: 20px; width: 100%; height: 100%; align-items: stretch; justify-content: center;">
                     
-                    <!-- Left Panel: Accounts -->
                     <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
                         <h3>Manage Support Head Accounts</h3>
                         <p class="placeholder-text" style="margin-top: 0;">Create or remove secondary admin accounts.</p>
@@ -435,7 +410,6 @@
                         </div>
                     </div>
 
-                    <!-- Hidden Dev Tools Panel -->
                     <div id="dev-tools-panel" class="panel" style="display: none; flex: 1; border: 1px solid var(--error); flex-direction: column;">
                         <h3 style="color: var(--error);"><span style="color: #f59e0b;">⚠️</span> Developer Testing Tools</h3>
                         <p class="placeholder-text" style="margin-top: 0;">Override system date and time to test attendance logic.</p>
@@ -469,7 +443,6 @@
                         <p id="dev-message" class="message"></p>
                     </div>
 
-                    <!-- Right Panel: UI Appearance & Registration Link -->
                     <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
                         <h3>UI Appearance</h3>
                         <p class="placeholder-text" style="margin-top: 0;">Select a theme below.</p>
@@ -484,7 +457,6 @@
                             <button id="btn-color-white" class="color-btn" onclick="changeAccentColor('White')" style="background: #ffffff; width: 35px; height: 35px; border-radius: 50%; padding: 0; border: none; cursor: pointer;"></button>
                         </div>
 
-                        <!-- REGISTRATION LINK GENERATOR MOVED HERE -->
                         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 30px 0 20px 0;">
 
                         <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Student Self-Registration Link</h4>
@@ -503,11 +475,6 @@
         </div>
     </main>
 
-    <!-- ========================================== -->
-    <!-- 4. MODAL OVERLAYS                          -->
-    <!-- ========================================== -->
-
-    <!-- Performance Modal -->
     <div id="performance-modal" class="modal-overlay" style="display: none;">
         <div class="centered-panel modal-content">
             <h3 id="perf-student-name" style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0;">Student Name</h3>
@@ -529,7 +496,6 @@
         </div>
     </div>
 
-    <!-- Time Out Action Modal -->
     <div id="timeout-modal" class="modal-overlay" style="display: none;">
         <div class="centered-panel modal-content" style="text-align: left;">
             <h3 style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">End of Shift Details</h3>
@@ -584,7 +550,6 @@
         </div>
     </div>
 
-    <!-- Today's Shift Quick View Modal -->
     <div id="today-shift-modal" class="modal-overlay" style="display: none;">
         <div class="centered-panel modal-content" style="text-align: left;">
             <h3 id="ts-name" style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">Today Shift Details</h3>

@@ -1602,10 +1602,10 @@ async function recordToGoogleSheets(dateStr) {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors', 
-            body: JSON.stringify(payload),
             headers: {
-                'Content-Type': 'application/json' 
-            }
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: "data=" + encodeURIComponent(JSON.stringify(payload))
         });
 
         alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);

@@ -339,7 +339,7 @@ async function generateRegistrationLink() {
         const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
         const data = await response.json();
         
-        const link = `${window.location.origin}/OSREGISTER?token=${data.token}`;
+        const link = `https://os-register.vercel.app/?token=${data.token}`;
         
         document.getElementById('reg-link-container').style.display = 'block';
         document.getElementById('reg-link-output').value = link;
@@ -659,6 +659,9 @@ async function applyExempt(type) {
     const s = students.find(x => x.id === pendingExemptId);
     
     if (s) {
+        const existingInLog = logs.find(l => l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('In') && !l.action.includes('Exempted'));
+        const existingOutLog = logs.find(l => l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('Out') && !l.action.includes('Exempted'));
+
         logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && (l.action.includes('Exempted') || l.action === 'No Attendance')));
 
         if (type === 'IN' || type === 'BOTH') {
@@ -669,7 +672,8 @@ async function applyExempt(type) {
                 action: 'Time In (Exempted)',
                 time: 'Exempted',
                 date: pendingExemptDate,
-                details: null
+                details: null,
+                originalLog: existingInLog || null
             });
         }
         
@@ -681,7 +685,8 @@ async function applyExempt(type) {
                 action: 'Time Out (Exempted)',
                 time: 'Exempted',
                 date: pendingExemptDate,
-                details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
+                originalLog: existingOutLog || null
             });
         }
 
@@ -701,7 +706,17 @@ async function applyExempt(type) {
 async function removeExemptions(idNum, dateStr) {
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    
+    const exemptLogs = logs.filter(l => l.id === idNum && l.date === dateStr && l.action.includes('Exempted'));
+    
     logs = logs.filter(l => !(l.id === idNum && l.date === dateStr && l.action.includes('Exempted')));
+    
+    exemptLogs.forEach(el => {
+        if (el.originalLog) {
+            logs.push(el.originalLog);
+        }
+    });
+    
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     await pushLogsToCloud();
     
@@ -771,7 +786,7 @@ async function handleTimeIn() {
         }
 
         const todayLogs = getTodayLogs(idNum);
-        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance')) {
+        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance' || l.action.includes('Exempted'))) {
             showMessage('student-message', 'You already have an attendance record for today.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
@@ -873,7 +888,7 @@ async function handleTimeOut() {
             return;
         }
 
-        if (todayLogs.some(l => l.action.includes('Time Out'))) {
+        if (todayLogs.some(l => l.action.includes('Time Out') && !l.action.includes('Exempted'))) {
             showMessage('student-message', 'You have already timed out for this shift.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
@@ -1713,7 +1728,7 @@ function renderMainDashboard() {
 
         scheduledToday.forEach(student => {
             const studentTodayLogs = logs.filter(l => l.id === student.id && l.date === todayStr);
-            const timeInLog = studentTodayLogs.find(l => l.action.includes('In') || l.action === 'Exempted');
+            const timeInLog = studentTodayLogs.find(l => l.action.includes('In') || l.action.includes('Exempted'));
             
             if (timeInLog) {
                 presentCount++;
@@ -1756,7 +1771,7 @@ function renderMainDashboard() {
                 let dStr = d.toLocaleDateString('en-US');
                 let dayIdx = d.getDay();
                 
-                let pCount = logs.filter(l => l.date === dStr && (l.action.includes('In') || l.action === 'Exempted')).length;
+                let pCount = logs.filter(l => l.date === dStr && (l.action.includes('In') || l.action.includes('Exempted'))).length;
                 weeklyData.push({ dayLabel: dayNames[dayIdx], count: pCount });
             }
             
@@ -1866,7 +1881,7 @@ function renderDashboardSummary() {
     );
 
     filteredStudents.forEach(student => {
-        const hasTimedOutToday = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action === 'Exempted'));
+        const hasTimedOutToday = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
         const hasTimedInToday = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('In'));
         
         let todayShiftBtn = '';
@@ -1979,15 +1994,15 @@ function viewTodayShift(idNum, dateStr) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
     const dayLogs = logs.filter(l => l.id === idNum && l.date === dateStr);
-    const timeInLog = dayLogs.find(l => l.action.includes('In') || l.action === 'Exempted');
-    const timeOutLog = dayLogs.find(l => l.action.includes('Out') || l.action === 'Exempted');
+    const timeInLog = dayLogs.find(l => l.action.includes('In') || l.action.includes('Exempted'));
+    const timeOutLog = dayLogs.find(l => l.action.includes('Out') || l.action.includes('Exempted'));
     
     if (!timeOutLog) return; 
     
     document.getElementById('ts-name').textContent = timeOutLog.name;
     
     const inEl = document.getElementById('ts-time-in');
-    if (timeInLog && timeInLog.action === 'Exempted') {
+    if (timeInLog && timeInLog.action.includes('Exempted')) {
         inEl.textContent = 'Exempted';
         inEl.style.color = '#66fcf1';
     } else if (timeInLog) {
@@ -1999,7 +2014,7 @@ function viewTodayShift(idNum, dateStr) {
     }
 
     const outEl = document.getElementById('ts-time-out');
-    if (timeOutLog.action === 'Exempted') {
+    if (timeOutLog.action.includes('Exempted')) {
         outEl.textContent = 'Exempted';
         outEl.style.color = '#66fcf1';
     } else {

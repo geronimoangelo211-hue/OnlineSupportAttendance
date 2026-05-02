@@ -1642,12 +1642,12 @@ async function recordToGoogleSheets(dateStr) {
         });
     });
 
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/a/macros/phinmaed.com/s/AKfycbxvWsoWHaCDcmkIG4xn_CSneippJsflZe1oQBciplMiNNCuwvJj0ibiTmuHg2ojDNWA/exec";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyewbogek6fmrmlSv9J55daO_bsSsjnBBkvg2BV6bmnKW_MW2JailxtNYo6QIMY77D6/exec";
 
     try {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors', 
+            mode: 'no-cors',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },

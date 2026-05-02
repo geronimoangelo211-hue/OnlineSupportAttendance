@@ -1599,64 +1599,58 @@ async function recordToGoogleSheets(dateStr) {
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
         const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
-        // Initialize tallies for this specific day
-        let t_In = 0;
-        let t_InLate = 0;
-        let t_Out = 0;
-        let t_OutLate = 0;
-        let t_NoAtt = 0;
-        let t_Exempt = 0;
+        let inText = 'Absent';
+        let outText = 'Absent';
+        let gc = '-';
+        let ann = '-';
+        let post = '-';
 
         if (exemptLog) {
-            t_Exempt = 1;
+            inText = 'Exempted';
+            outText = 'Exempted';
         } else if (noAttLog) {
-            t_NoAtt = 1;
+            inText = 'Absent';
+            outText = 'Absent';
         } else {
-            // Check Time In Status
             if (timeInLog) {
                 if (timeInLog.action.includes('Exempted')) {
-                    t_Exempt = 1; // Mark exempt if IN is exempted
-                } else if (timeInLog.action.includes('Late')) {
-                    t_InLate = 1;
+                    inText = 'Exempted';
                 } else {
-                    t_In = 1;
+                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                    inText = `${timeInLog.time} - ${status}`;
                 }
             }
 
-            // Check Time Out Status
             if (timeOutLog) {
                 if (timeOutLog.action.includes('Exempted')) {
-                    // If OUT is exempted, but they timed in normally, they get credit for the IN, and 1 exempt tally.
-                    t_Exempt = 1; 
-                } else if (timeOutLog.action.includes('Late')) {
-                    t_OutLate = 1;
+                    outText = 'Exempted';
                 } else {
-                    t_Out = 1;
+                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                    outText = `${timeOutLog.time} - ${status}`;
+                    const details = timeOutLog.details || {};
+                    gc = details.gcHandle || '-';
+                    ann = details.announcement || '-';
+                    post = details.whoPosted || '-';
                 }
-            }
-            
-            // If they have NO logs at all for the day, they are absent.
-            if (!timeInLog && !timeOutLog && !noAttLog && !exemptLog) {
-                t_NoAtt = 1;
             }
         }
 
         payload.push({
             name: student.name,
             id: student.id,
-            tallyTimeIn: t_In,
-            tallyTimeInLate: t_InLate,
-            tallyTimeOut: t_Out,
-            tallyTimeOutLate: t_OutLate,
-            tallyNoAtt: t_NoAtt,
-            tallyExempt: t_Exempt
+            timeIn: inText,
+            timeOut: outText,
+            date: dateStr,
+            gcHandle: gc,
+            announcement: ann,
+            postedBy: post
         });
     });
 
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
     try {
-        const response = await fetch(GOOGLE_SCRIPT_URL, {
+        await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
             headers: {
@@ -1665,7 +1659,7 @@ async function recordToGoogleSheets(dateStr) {
             body: "data=" + encodeURIComponent(JSON.stringify(payload))
         });
 
-        alert(`Successfully sent tally data for ${dateStr} to Google Sheets!`);
+        alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
     } catch (error) {
         console.error("Error sending to Google Sheets:", error);
         alert("Network error trying to contact Google Sheets. Please ensure you deployed the New Version in Apps Script.");

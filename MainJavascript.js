@@ -477,34 +477,64 @@ function closeEditStudentModal() {
 }
 
 async function saveStudentEdit() {
-    const id = document.getElementById('edit-stu-orig-id').value;
+    const origId = document.getElementById('edit-stu-orig-id').value;
     const name = document.getElementById('edit-stu-name').value.trim();
+    const newId = document.getElementById('edit-stu-id').value.trim();
     let gc = document.getElementById('edit-stu-gc').value;
     
     if (gc === 'Other') {
         gc = document.getElementById('edit-stu-gc-other').value.trim();
     }
 
-    if (!name) {
-        alert("Name cannot be empty.");
+    if (!name || !newId) {
+        alert("Name and Student ID cannot be empty.");
         return;
     }
 
     await pullFromCloud();
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const s = students.find(x => x.id === id);
+    
+    // Prevent accidentally using an ID that already belongs to someone else
+    if (newId !== origId && students.some(x => x.id === newId)) {
+        alert("This Student ID is already in use by another student!");
+        return;
+    }
+
+    const s = students.find(x => x.id === origId);
     
     if (s) {
         s.name = name;
+        s.id = newId; // Saves the new ID
         s.gcHandle = gc;
         localStorage.setItem('students', JSON.stringify(students));
         await pushStudentsToCloud();
+        
+        // CRITICAL FIX: If the ID changed, we MUST update all their past logs 
+        // so their performance history is not lost!
+        if (origId !== newId) {
+            let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+            let logsUpdated = false;
+            
+            logs.forEach(l => {
+                if (l.id === origId) {
+                    l.id = newId;
+                    l.name = name; 
+                    logsUpdated = true;
+                }
+            });
+            
+            if (logsUpdated) {
+                localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+                await pushLogsToCloud();
+            }
+        }
         
         renderStudents();
         renderSchedule();
         renderMainDashboard();
         renderDashboardSummary();
         renderDutyToday();
+        if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
     }
     
     closeEditStudentModal();

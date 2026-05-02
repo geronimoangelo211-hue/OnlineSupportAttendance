@@ -75,6 +75,10 @@ let pendingExemptDate = null;
 let pendingExemptCheckbox = null;
 
 // --- ATTENDANCE SYSTEM LOCK ---
+function isSystemLocked() {
+    return localStorage.getItem('attendance_closed') === 'true';
+}
+
 function toggleAttendanceState(elem) {
     const knob = document.getElementById('sys-toggle-knob');
     if (elem.checked) {
@@ -90,6 +94,32 @@ function toggleAttendanceState(elem) {
             knob.parentElement.style.backgroundColor = '#334155';
         }
     }
+    checkSystemLockStatus();
+}
+
+function checkSystemLockStatus() {
+    const isLocked = isSystemLocked();
+    
+    // Student View Lock
+    const studentLockOverlay = document.getElementById('student-lock-overlay');
+    if (studentLockOverlay) {
+        studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
+    }
+
+    // Admin Live Attendance Lock
+    const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
+    if (adminLiveLockOverlay) {
+        adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
+    }
+
+    // Disable action buttons globally if locked
+    document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
+        if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
+            btn.disabled = isLocked;
+            btn.style.opacity = isLocked ? '0.5' : '1';
+            btn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
+        }
+    });
 }
 
 function getShiftDateDetails() {
@@ -153,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('portal-mode');
 
     checkDeviceLock();
+    checkSystemLockStatus();
     setTimeout(initSliderCaptcha, 50);
 
     isIncognito().then(isPrivate => {
@@ -211,9 +242,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 setInterval(async () => {
     await pullFromCloud(); 
+    checkSystemLockStatus();
     
-    let updatedNoAtt = checkAndApplyAutoNoAttendance();
-    let updatedTimeOut = checkAndApplyAutoTimeOut(); 
+    if(!isSystemLocked()) {
+        checkAndApplyAutoNoAttendance();
+        checkAndApplyAutoTimeOut(); 
+    }
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
         renderStudents();
@@ -636,6 +670,8 @@ async function toggleStudentDay(id, day) {
 }
 
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
+    if(isSystemLocked()) return; // Extra backend protection
+
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const shift = getShiftDateDetails();
@@ -875,12 +911,7 @@ async function devClearLogs() {
 }
 
 async function handleTimeIn() {
-    // Check if attendance is locked by admin
-    if (localStorage.getItem('attendance_closed') === 'true') {
-        showMessage('student-message', 'Access Denied: The Attendance System is currently CLOSED.', 'error');
-        initSliderCaptcha();
-        return;
-    }
+    if (isSystemLocked()) return; // Fallback check
 
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -966,12 +997,7 @@ async function handleTimeIn() {
 }
 
 async function handleTimeOut() {
-    // Check if attendance is locked by admin
-    if (localStorage.getItem('attendance_closed') === 'true') {
-        showMessage('student-message', 'Access Denied: The Attendance System is currently CLOSED.', 'error');
-        initSliderCaptcha();
-        return;
-    }
+    if (isSystemLocked()) return; // Fallback check
 
     if (!isCaptchaSolved) {
         showMessage('student-message', 'Please complete the slider puzzle.', 'error');
@@ -1088,6 +1114,8 @@ async function handleTimeOut() {
 }
 
 async function finalizeTimeOut() {
+    if(isSystemLocked()) return; // Extra backend protection
+
     let gcHandle = document.getElementById('gc-handle').value;
     const announcement = document.querySelector('input[name="announcement"]:checked');
     const whoPosted = document.querySelector('input[name="who-posted"]:checked');
@@ -1139,6 +1167,8 @@ async function finalizeTimeOut() {
 }
 
 function checkAndApplyAutoNoAttendance() {
+    if(isSystemLocked()) return false; // Stop auto-logs if system is closed
+
     const shift = getShiftDateDetails();
     if (shift.hour < 12 || (shift.hour === 12 && shift.min === 0)) return false; 
     
@@ -1171,6 +1201,8 @@ function checkAndApplyAutoNoAttendance() {
 }
 
 function checkAndApplyAutoTimeOut() {
+    if(isSystemLocked()) return false; // Stop auto-logs if system is closed
+
     const shift = getShiftDateDetails();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     let updated = false;
@@ -1323,6 +1355,7 @@ async function switchView(viewId) {
             checkDeviceLock(); 
             setTimeout(initSliderCaptcha, 50); 
         }
+        checkSystemLockStatus(); // Ensure overlay applies if they return to student view
     }
     
     generateAdminCaptcha();
@@ -1339,6 +1372,7 @@ async function switchView(viewId) {
         renderLogs();
         renderMainDashboard(); 
         renderDutyToday(); 
+        checkSystemLockStatus(); // Ensure live attendance locks
     } else {
         document.body.classList.add('portal-mode'); 
         const mh = document.getElementById('main-header');
@@ -2065,7 +2099,11 @@ function applyDevSettings() {
     else localStorage.removeItem('devDayOverride');
 
     showMessage('dev-message', 'Time Travel Active! UI is updated. System Date Changed.', 'success');
-    checkAndApplyAutoNoAttendance();
+    
+    // Only check auto logs if system is NOT locked
+    if(!isSystemLocked()) {
+        checkAndApplyAutoNoAttendance();
+    }
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
         renderDashboardSummary();
@@ -2198,9 +2236,6 @@ function renderMainDashboard() {
         const deadStudentsList = document.getElementById('dash-dead-students');
         if (deadStudentsList) {
             deadStudentsList.innerHTML = '';
-            deadStudentsList.style.maxHeight = '280px';
-            deadStudentsList.style.overflowY = 'auto';
-            deadStudentsList.style.paddingRight = '5px';
 
             let deadCount = 0;
 
@@ -2219,14 +2254,13 @@ function renderMainDashboard() {
             }
         }
 
-        // --- UPDATED: Scrollable Best Performance List ---
-        let perfList = [];
+        // --- UPDATED: Best Performance Panel (Single Entry) ---
+        let bestStudentObj = null;
+        let bestScore = -1;
+
         students.forEach(student => {
             const studentLogs = logs.filter(l => l.id === student.id);
-            if (studentLogs.length === 0) {
-                perfList.push({ name: student.name, rate: 0 });
-                return;
-            }
+            if (studentLogs.length === 0) return;
 
             let onTimeIn = 0;
             let lateIn = 0;
@@ -2254,29 +2288,18 @@ function renderMainDashboard() {
             perfRate += bonus;
             if (perfRate > 100) perfRate = 100;
 
-            perfList.push({ name: student.name, rate: perfRate });
+            if (perfRate > bestScore) {
+                bestScore = perfRate;
+                bestStudentObj = { name: student.name, rate: Math.round(perfRate) };
+            }
         });
-
-        // Sort descending
-        perfList.sort((a, b) => b.rate - a.rate);
 
         const bestPerfEl = document.getElementById('dash-best-perf');
         if (bestPerfEl) {
-            bestPerfEl.innerHTML = '';
-            bestPerfEl.style.maxHeight = '280px';
-            bestPerfEl.style.overflowY = 'auto';
-            bestPerfEl.style.paddingRight = '5px';
-
-            if(perfList.length === 0) {
-                 bestPerfEl.innerHTML = '<p class="placeholder-text" style="text-align: center; padding: 20px;">No data available.</p>';
+            if (bestStudentObj) {
+                bestPerfEl.innerHTML = `${bestStudentObj.name} <span style="color: var(--accent); font-size: 1.8rem; text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.3);">(${bestStudentObj.rate}%)</span>`;
             } else {
-                 perfList.forEach(p => {
-                     let color = p.rate >= 80 ? 'var(--success)' : (p.rate >= 50 ? '#f59e0b' : 'var(--error)');
-                     bestPerfEl.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center;">
-                         <span style="color: var(--text-main); font-size: 13px;">${p.name}</span>
-                         <span style="color: ${color}; font-weight: bold; font-size: 13px;">${Math.round(p.rate)}%</span>
-                     </div>`;
-                 });
+                bestPerfEl.innerHTML = 'TBD <span style="color: var(--text-muted); font-size: 1.2rem;">(0%)</span>';
             }
         }
     } catch (e) {

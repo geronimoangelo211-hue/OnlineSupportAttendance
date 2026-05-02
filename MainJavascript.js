@@ -100,21 +100,17 @@ function toggleAttendanceState(elem) {
 function checkSystemLockStatus() {
     const isLocked = isSystemLocked();
     
-    // Student View Overlay
     const studentLockOverlay = document.getElementById('student-lock-overlay');
     if (studentLockOverlay) {
         studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
     }
 
-    // Admin Live Attendance Overlay
     const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
     if (adminLiveLockOverlay) {
         adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
     }
 
-    // Disable primary action buttons visually and functionally
     document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
-        // Exclude buttons inside modals (like 'Cancel') or navigation toggles
         if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
             btn.disabled = isLocked;
             btn.style.opacity = isLocked ? '0.5' : '1';
@@ -123,13 +119,16 @@ function checkSystemLockStatus() {
     });
 }
 
+// --- SHIFT LOGIC (4:01 AM ROLLOVER) ---
 function getShiftDateDetails() {
     const pht = getPHT();
     const hour = pht.getHours();
+    const min = pht.getMinutes();
     
     let shiftDate = new Date(pht);
-    // Late checkouts (12:00 AM - 4:59 AM) belong to the previous day
-    if (hour >= 0 && hour < 5) {
+    // Shift stays on "Yesterday" from 12:00 AM exactly up to 4:00 AM exactly.
+    // At 4:01 AM (hour === 4 && min >= 1), it becomes the NEW shift day.
+    if (hour < 4 || (hour === 4 && min === 0)) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
     
@@ -139,7 +138,7 @@ function getShiftDateDetails() {
         dateStr: shiftDate.toLocaleDateString('en-US'),
         dayStr: days[shiftDate.getDay()],
         hour: hour,
-        min: pht.getMinutes(),
+        min: min,
         realTimeStr: pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
 }
@@ -242,13 +241,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// --- UPDATED BACKGROUND LOOP ---
 setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
+    // Only process auto-attendance if the system is NOT locked
     if(!isSystemLocked()) {
-        checkAndApplyAutoNoAttendance();
-        checkAndApplyAutoTimeOut(); 
+        processPastShifts(); 
     }
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -672,7 +672,7 @@ async function toggleStudentDay(id, day) {
 }
 
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
-    if(isSystemLocked()) return; // Extra backend protection
+    if(isSystemLocked()) return; 
 
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
@@ -974,9 +974,6 @@ async function handleTimeIn() {
             showMessage('student-message', 'Time In opens at 5:00 AM.', 'error');
             initSliderCaptcha();
             return;
-        } else if (shift.hour > 12 || (shift.hour === 12 && shift.min >= 1)) { 
-            await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
-            showLockedScreen('You missed your Time In. You are marked as No Attendance.');
         } else if (shift.hour > 8 || (shift.hour === 8 && shift.min >= 1)) { 
             await logAttendanceAction(student, 'Time In (Late)', null, shift.dateStr);
             showMessage('student-message', 'Successfully logged Time In (Late)', 'success');
@@ -1060,14 +1057,9 @@ async function handleTimeOut() {
         const hasTimeIn = todayLogs.some(l => l.action.includes('Time In'));
 
         if (!hasTimeIn) {
-            if (shift.hour > 12 || shift.hour < 5) {
-                await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
-                showLockedScreen('You missed your Time In for this shift. Marked as No Attendance.');
-            } else {
-                showMessage('student-message', 'No Time In record found for this shift.', 'error');
-                initSliderCaptcha();
-                checkDeviceLock();
-            }
+            showMessage('student-message', 'No Time In record found for this shift.', 'error');
+            initSliderCaptcha();
+            checkDeviceLock();
             return;
         }
 
@@ -1086,6 +1078,7 @@ async function handleTimeOut() {
         } 
 
         pendingTimeOutStudent = student;
+        // Shift hour 0-4 evaluates as Late. (Because hour < 4 or hour 4 min 0 triggers previous day logic)
         pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
         pendingTimeOutDate = shift.dateStr; 
         
@@ -1168,81 +1161,71 @@ async function finalizeTimeOut() {
     }
 }
 
-function checkAndApplyAutoNoAttendance() {
-    if(isSystemLocked()) return false; 
+// --- UPDATED: 4:01 AM Shift Rollover processing for BOTH Auto-No-Attendance and Auto-Exemptions ---
+function processPastShifts() {
+    if(isSystemLocked()) return false;
 
     const shift = getShiftDateDetails();
-    if (shift.hour < 12 || (shift.hour === 12 && shift.min === 0)) return false; 
-    
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    
     let updated = false;
-    const scheduledToday = students.filter(s => s.assignedDays && s.assignedDays.includes(shift.dayStr));
-    
-    scheduledToday.forEach(student => {
-        const hasLogToday = logs.some(l => l.id === student.id && l.date === shift.dateStr);
-        if (!hasLogToday) {
-            logs.push({
-                name: student.name,
-                id: student.id,
-                action: 'No Attendance',
-                time: shift.realTimeStr,
-                date: shift.dateStr,
-                details: null
-            });
-            updated = true;
-        }
-    });
-    
-    if (updated) {
-        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); 
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // We use the literal real-time clock to determine previous days safely.
+    const pht = getPHT();
+    let currentRealDate = new Date(pht);
+    // If it's before 4:01 AM, we are still technically in "yesterday's" shift.
+    // So "past shifts" mean anything older than yesterday.
+    if (currentRealDate.getHours() < 4 || (currentRealDate.getHours() === 4 && currentRealDate.getMinutes() === 0)) {
+        currentRealDate.setDate(currentRealDate.getDate() - 1);
     }
-    return updated;
-}
+    
+    // Check the last 3 days to catch anything that slipped through
+    for (let i = 1; i <= 3; i++) {
+        let d = new Date(currentRealDate);
+        d.setDate(d.getDate() - i);
+        let pastDateStr = d.toLocaleDateString('en-US');
+        let pastDayStr = dayNames[d.getDay()];
 
-// --- UPDATED: Replaces Auto-Late with Auto-Exempt after the shift ends (5:00 AM the next day) ---
-function checkAndApplyAutoTimeOut() {
-    if(isSystemLocked()) return false; 
+        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(pastDayStr));
+        
+        scheduledStudents.forEach(student => {
+            const sLogs = logs.filter(l => l.id === student.id && l.date === pastDateStr);
+            const hasTimeIn = sLogs.some(l => l.action.includes('In'));
+            const hasTimeOut = sLogs.some(l => l.action.includes('Out') || l.action.includes('Exempted'));
+            const hasNoAtt = sLogs.some(l => l.action === 'No Attendance');
 
-    const shift = getShiftDateDetails();
-    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    let updated = false;
-
-    const uniqueDates = [...new Set(logs.map(l => l.date))];
-
-    uniqueDates.forEach(dateStr => {
-        // If the date is no longer today's shift date, the shift has completely rolled over (past 5:00 AM)
-        if (dateStr !== shift.dateStr) {
-            const dayLogs = logs.filter(l => l.date === dateStr);
-            const studentIds = [...new Set(dayLogs.map(l => l.id))];
-
-            studentIds.forEach(id => {
-                const sLogs = dayLogs.filter(l => l.id === id);
-                const hasTimeIn = sLogs.some(l => l.action.includes('Time In'));
-                const hasTimeOut = sLogs.some(l => l.action.includes('Time Out') || l.action.includes('Exempted'));
-
-                // If they logged in but never logged out by the end of the full shift grace period
-                if (hasTimeIn && !hasTimeOut) {
-                    const studentName = sLogs[0].name;
-                    logs.push({
-                        name: studentName,
-                        id: id,
-                        action: 'Time Out (Exempted)', // Replaced auto time out with auto exempt
-                        time: 'Exempted',
-                        date: dateStr,
-                        details: {
-                            gcHandle: 'System Auto-Exempt',
-                            announcement: 'No',
-                            whoPosted: 'System'
-                        }
-                    });
-                    updated = true;
-                }
-            });
-        }
-    });
+            // Missing Time In completely -> No Attendance at 4:01 AM
+            if (sLogs.length === 0) {
+                logs.push({
+                    name: student.name,
+                    id: student.id,
+                    action: 'No Attendance',
+                    time: '4:01 AM',
+                    date: pastDateStr,
+                    details: null
+                });
+                updated = true;
+            } 
+            // Has Time In but no Time Out -> Auto-Exempt stamped at 11:59 PM
+            else if (hasTimeIn && !hasTimeOut && !hasNoAtt) {
+                logs.push({
+                    name: student.name,
+                    id: student.id,
+                    action: 'Time Out (Exempted)',
+                    time: '11:59 PM',
+                    date: pastDateStr,
+                    details: {
+                        gcHandle: 'System Auto-Exempt',
+                        announcement: 'No',
+                        whoPosted: 'System'
+                    }
+                });
+                updated = true;
+            }
+        });
+    }
 
     if (updated) {
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
@@ -2101,9 +2084,8 @@ function applyDevSettings() {
 
     showMessage('dev-message', 'Time Travel Active! UI is updated. System Date Changed.', 'success');
     
-    // Only check auto logs if system is NOT locked
     if(!isSystemLocked()) {
-        checkAndApplyAutoNoAttendance();
+        processPastShifts();
     }
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -2230,7 +2212,6 @@ function renderMainDashboard() {
             });
         }
 
-        // --- UPDATED: 21 Days Dead Students ---
         const cutoffDate = new Date(getPHT());
         cutoffDate.setDate(cutoffDate.getDate() - 21); 
         
@@ -2255,7 +2236,6 @@ function renderMainDashboard() {
             }
         }
 
-        // --- UPDATED: Best Performance Panel (Single Entry) ---
         let bestStudentObj = null;
         let bestScore = -1;
 

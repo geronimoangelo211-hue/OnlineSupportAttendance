@@ -125,7 +125,6 @@ function getShiftDateDetails() {
     const min = pht.getMinutes();
     
     let shiftDate = new Date(pht);
-    // Shift stays on "Yesterday" from 12:00 AM exactly up to 4:00 AM exactly.
     if (hour < 4 || (hour === 4 && min === 0)) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
@@ -188,9 +187,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     isIncognito().then(isPrivate => {
         if (isPrivate) {
-            document.getElementById('turn-in-form').style.display = 'none';
-            document.getElementById('locked-screen').style.display = 'none';
-            document.getElementById('incognito-screen').style.display = 'block';
+            const form = document.getElementById('turn-in-form');
+            const locked = document.getElementById('locked-screen');
+            const incognito = document.getElementById('incognito-screen');
+            const sysLock = document.getElementById('student-lock-overlay');
+            
+            if(form) form.style.display = 'none';
+            if(locked) locked.style.display = 'none';
+            if(sysLock) sysLock.style.display = 'none';
+            if(incognito) incognito.style.display = 'flex'; // Uses flex to perfectly cover screen
         }
     });
 
@@ -258,7 +263,6 @@ setInterval(async () => {
     }
 }, 15000);
 
-// --- UNIFIED SHIFT ROLLOVER & AUTO-LOGGING SYSTEM (WITH GHOST PREVENTION) ---
 function processPastShifts() {
     if(isSystemLocked()) return false;
 
@@ -284,7 +288,6 @@ function processPastShifts() {
         let checkDateStr = checkDate.toLocaleDateString('en-US');
         let checkDayStr = dayNames[checkDate.getDay()];
 
-        // If user manually deleted this date from history, completely skip recreating logs for it!
         if (deletedDates.includes(checkDateStr)) continue;
 
         const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
@@ -840,7 +843,6 @@ function deleteHistoryDate(dateStr, event) {
         
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
 
-        // Add to permanent blacklist so the auto-scanner ignores it forever
         let deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || [];
         if (!deletedDates.includes(dateStr)) {
             deletedDates.push(dateStr);
@@ -1376,9 +1378,12 @@ async function switchView(viewId) {
             const form = document.getElementById('turn-in-form');
             const locked = document.getElementById('locked-screen');
             const incognito = document.getElementById('incognito-screen');
+            const sysLock = document.getElementById('student-lock-overlay');
+            
             if(form) form.style.display = 'none';
             if(locked) locked.style.display = 'none';
-            if(incognito) incognito.style.display = 'block';
+            if(sysLock) sysLock.style.display = 'none';
+            if(incognito) incognito.style.display = 'flex';
         } else {
             const form = document.getElementById('turn-in-form');
             const locked = document.getElementById('locked-screen');
@@ -1870,9 +1875,12 @@ async function resetStudentUI() {
         const form = document.getElementById('turn-in-form');
         const locked = document.getElementById('locked-screen');
         const incognito = document.getElementById('incognito-screen');
+        const sysLock = document.getElementById('student-lock-overlay');
+        
         if(form) form.style.display = 'none';
         if(locked) locked.style.display = 'none';
-        if(incognito) incognito.style.display = 'block';
+        if(sysLock) sysLock.style.display = 'none';
+        if(incognito) incognito.style.display = 'flex';
         return;
     }
     
@@ -2255,90 +2263,6 @@ function renderMainDashboard() {
                 `;
                 barLabelsEl.innerHTML += `<div style="flex: 1; text-align: center; font-weight: bold;">${data.dayLabel}</div>`;
             });
-        }
-
-        // --- UPDATED DUAL-LINE CHART ---
-        const timeInLogs = logs.filter(l => l.date === todayStr && l.action.includes('In') && !l.action.includes('Exempted'));
-        const timeOutLogs = logs.filter(l => l.date === todayStr && l.action.includes('Out') && !l.action.includes('Exempted'));
-        
-        const hourlyInCounts = new Array(24).fill(0);
-        const hourlyOutCounts = new Array(24).fill(0);
-        
-        function populateCounts(targetLogs, arr) {
-            targetLogs.forEach(log => {
-                if(log.time === 'Exempted') return;
-                const timeMatch = log.time.match(/(\d+):(\d+)\s+(AM|PM)/i);
-                if (timeMatch) {
-                    let h = parseInt(timeMatch[1]);
-                    const ampm = timeMatch[3].toUpperCase();
-                    if (ampm === 'PM' && h !== 12) h += 12;
-                    if (ampm === 'AM' && h === 12) h = 0;
-                    
-                    let index = (h >= 5) ? (h - 5) : (h + 19);
-                    if (index >= 0 && index < 24) {
-                        arr[index]++;
-                    }
-                }
-            });
-        }
-        
-        populateCounts(timeInLogs, hourlyInCounts);
-        populateCounts(timeOutLogs, hourlyOutCounts);
-
-        const maxLineVal = Math.max(...hourlyInCounts, ...hourlyOutCounts, 5);
-        const lineChartContainer = document.getElementById('dash-line-chart-container');
-        if (lineChartContainer) {
-            // Removed horizontal lines from SVG
-            let svgHTML = `<svg width="100%" height="100%" viewBox="-10 -20 260 140" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
-            
-            let inPoints = [];
-            hourlyInCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
-                inPoints.push(`${x},${y}`);
-            });
-
-            let outPoints = [];
-            hourlyOutCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
-                outPoints.push(`${x},${y}`);
-            });
-            
-            // Draw Lines
-            svgHTML += `<polyline points="${outPoints.join(' ')}" fill="none" stroke="var(--error)" stroke-width="2.5" />`;
-            svgHTML += `<polyline points="${inPoints.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" />`;
-            
-            // Draw Out Circles and Text (Below line)
-            hourlyOutCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
-                svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--error)" stroke-width="1.5" />`;
-                if (count > 0) {
-                    svgHTML += `<text x="${x}" y="${y + 12}" fill="var(--error)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
-                }
-            });
-
-            // Draw In Circles and Text (Above line)
-            hourlyInCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
-                svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--accent)" stroke-width="1.5" />`;
-                if (count > 0) {
-                    svgHTML += `<text x="${x}" y="${y - 8}" fill="var(--accent)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
-                }
-            });
-
-            svgHTML += `</svg>`;
-            
-            let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 10px; color: var(--text-muted); font-size: 10px; padding: 0 5px;">`;
-            const lineLabels = ['5a','','','8a','','','11a','','','2p','','','5p','','','8p','','','11p','','','2a','','4a'];
-            lineLabels.forEach(lbl => {
-                labelsHTML += `<span style="flex: 1; text-align: center;">${lbl}</span>`;
-            });
-            labelsHTML += `</div>`;
-            
-            lineChartContainer.innerHTML = svgHTML + labelsHTML;
         }
 
         const cutoffDate = new Date(getPHT());
@@ -2999,15 +2923,26 @@ function resetDeviceLockUI(idInput, btnIn, lockMsg) {
 
 async function isIncognito() {
     return new Promise((resolve) => {
-        const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-        if (!fs) {
-            if (navigator.storage && navigator.storage.estimate) {
-                navigator.storage.estimate().then(estimate => resolve(estimate.quota < 120000000));
-            } else {
-                resolve(false);
-            }
+        let isPrivate = false;
+
+        if (navigator.storage && navigator.storage.estimate) {
+            navigator.storage.estimate().then(estimate => {
+                if (estimate.quota < 500000000) { 
+                    resolve(true); 
+                    return; 
+                }
+                const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+                if (fs) {
+                    fs(window.TEMPORARY, 100, 
+                        () => { resolve(false); }, 
+                        () => { resolve(true); }   
+                    );
+                } else {
+                    resolve(false);
+                }
+            }).catch(() => resolve(false));
         } else {
-            fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
+            resolve(false);
         }
     });
 }

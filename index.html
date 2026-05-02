@@ -22,7 +22,6 @@
     </header>
 
     <main id="student-view" class="view active">
-        
         <div class="centered-panel" id="turn-in-form">
             <h3>Student Online Support</h3>
             <p>Enter your Student ID to log your attendance.</p>
@@ -83,7 +82,6 @@
     </main>
 
     <main id="admin-dashboard-view" class="view">
-        
         <div class="admin-navbar-container">
             <div class="admin-navbar">
                 <div class="admin-brand">Support Head</div>
@@ -135,7 +133,6 @@
                     </div>
 
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 40px;">
-                        
                         <div style="display: flex; flex-direction: column; gap: 30px;">
                             
                             <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
@@ -182,7 +179,6 @@
 
             <div id="sec-attendance" class="admin-section">
                 <div class="panel" style="background: #16181d; padding: 40px 30px; height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 20px; border-radius: 0; border: none; box-shadow: none;">
-                    
                     <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0; padding: 0;">
                         <div style="width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 20px;">
                             <div>
@@ -194,7 +190,6 @@
                     </div>
                     
                     <div style="display: flex; gap: 20px; flex: 1 1 0; min-height: 0; overflow: hidden; padding: 0;">
-
                         <div style="flex: 2; display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 15px; min-height: 0; min-width: 0;">
                             <div class="sr-tabs-container">
                                 <div style="display: flex; gap: 4px;">
@@ -242,7 +237,6 @@
                             <div class="duty-list-container" id="duty-today-list" style="flex: 1; max-height: none;">
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -251,7 +245,6 @@
                 <div class="dashboard-grid-layout" style="display: flex; flex-direction: row; gap: 30px; flex: 1; align-items: stretch;">
 
                     <div class="panel" style="flex: 0.8; display: flex; flex-direction: column; gap: 35px; overflow-y: auto;">
-                        
                         <div>
                             <h3>Create Student Support</h3>
                             <div class="form-group">
@@ -283,19 +276,6 @@
                             </div>
                             <p id="admin-message" class="message"></p>
                         </div>
-
-                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 0;">
-
-                        <div>
-                            <h3>Edit Online Support GroupChat Handle</h3>
-                            <div class="form-group">
-                                <input type="text" id="edit-student-id" placeholder="Enter Student ID">
-                                <input type="text" id="edit-student-gc" placeholder="Enter Custom Tag Name (e.g. BSIT)">
-                                <button onclick="updateStudentGC()" class="btn-primary">UPDATE GC HANDLE</button>
-                            </div>
-                            <p id="edit-gc-message" class="message"></p>
-                        </div>
-                        
                     </div>
 
                     <div class="panel" style="flex: 1.2; display: flex; flex-direction: column; overflow: hidden;">
@@ -378,6 +358,7 @@
                                         <th>GC Handle</th>
                                         <th>Announcement</th>
                                         <th>Posted By</th>
+                                        <th>Exempt</th>
                                     </tr>
                                 </thead>
                                 <tbody id="history-logs-body">
@@ -493,6 +474,49 @@
             </div>
             
             <button class="btn-primary" onclick="closePerformanceModal()" style="margin-top: 20px;">Close Report</button>
+        </div>
+    </div>
+
+    <div id="edit-student-modal" class="modal-overlay" style="display: none;">
+        <div class="centered-panel modal-content" style="text-align: left;">
+            <h3 style="color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-top: 0; text-align: center;">Edit Student Data</h3>
+            <input type="hidden" id="edit-stu-orig-id">
+            
+            <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 15px; display: block;">Full Name</label>
+            <input type="text" id="edit-stu-name">
+            
+            <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">Student ID (Cannot be changed)</label>
+            <input type="text" id="edit-stu-id" disabled style="opacity: 0.5;">
+            
+            <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">GC Handle</label>
+            <select id="edit-stu-gc" onchange="toggleEditStudentOtherGC(this.value)">
+                <option value="">-- Assign GC Handle --</option>
+                <option value="BSA">BSA</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BSED ENG">BSED ENG</option>
+                <option value="BSPT">BSPT</option>
+                <option value="BSHM">BSHM</option>
+                <option value="BSTM">BSTM</option>
+                <option value="BSCRIM">BSCRIM</option>
+                <option value="BSPHARMA">BSPHARMA</option>
+                <option value="BSRESPI">BSRESPI</option>
+                <option value="BSED FIL">BSED FIL</option>
+                <option value="BSN">BSN</option>
+                <option value="BSPSYCH">BSPSYCH</option>
+                <option value="RAD">RAD</option>
+                <option value="BSRADTECH">BSRADTECH</option>
+                <option value="BEED">BEED</option>
+                <option value="BSBA-FM">BSBA-FM</option>
+                <option value="BSBA-MM">BSBA-MM</option>
+                <option value="BSMT">BSMT</option>
+                <option value="Other">Other</option>
+            </select>
+            <input type="text" id="edit-stu-gc-other" style="display:none; margin-top: 10px;" placeholder="Type Custom GC">
+            
+            <div style="display: flex; gap: 10px; margin-top: 25px;">
+                <button class="btn-out" onclick="closeEditStudentModal()" style="flex: 1; background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted);">Cancel</button>
+                <button class="btn-primary" onclick="saveStudentEdit()" style="flex: 1; margin-top: 0;">Save Changes</button>
+            </div>
         </div>
     </div>
 

@@ -244,7 +244,6 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
-    // Process previous days' rollover data strictly at 4:01 AM or later.
     if(!isSystemLocked()) {
         processPastShifts(); 
     }
@@ -2289,6 +2288,7 @@ function renderMainDashboard() {
         const maxLineVal = Math.max(...hourlyInCounts, ...hourlyOutCounts, 5);
         const lineChartContainer = document.getElementById('dash-line-chart-container');
         if (lineChartContainer) {
+            // Removed horizontal lines from SVG
             let svgHTML = `<svg width="100%" height="100%" viewBox="-10 -20 260 140" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
             
             let inPoints = [];

@@ -30,12 +30,16 @@
             margin: 0;
         }
         
-        /* Forces all dashboard panels to be the exact same size */
+        /* STRICT PANEL SIZING: Forces a perfect grid and stops the SVG from exploding */
         .dash-panel-standard {
-            height: 340px; 
-            display: flex;
-            flex-direction: column;
-            overflow: hidden; /* Keeps UI from breaking screen boundaries */
+            height: 360px !important; 
+            min-height: 360px !important;
+            max-height: 360px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            padding: 20px !important;
         }
     </style>
 </head>
@@ -171,15 +175,16 @@
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 40px; align-items: stretch;">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 40px; align-items: start;">
                         
-                        <!-- LEFT COLUMN: Charts (3 panels, stacked 2 + 1) -->
+                        <!-- LEFT COLUMN: Charts -->
                         <div style="display: flex; flex-direction: column; gap: 20px;">
                             
                             <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
-                                <div class="panel dash-panel-standard" style="padding: 25px;">
+                                <!-- Breakdown Panel -->
+                                <div class="panel dash-panel-standard">
                                     <h3 style="margin-top: 0; margin-bottom: 0; text-align: left;">Attendance Breakdown</h3>
-                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 15px;">
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 15px; min-height: 0;">
                                         <div id="dash-pie-chart" class="pie-chart"></div>
                                         <div style="display: flex; gap: 15px; margin-top: 25px; font-weight: bold; font-size: 13px;">
                                             <span style="color: var(--success);"><span style="display:inline-block; width:12px; height:12px; background:var(--success); border-radius:50%; margin-right:5px;"></span>Present</span>
@@ -188,40 +193,42 @@
                                     </div>
                                 </div>
 
-                                <div class="panel dash-panel-standard" style="padding: 25px;">
+                                <!-- Week Bar Chart -->
+                                <div class="panel dash-panel-standard">
                                     <h3 style="margin-top: 0; margin-bottom: 15px; text-align: left;">Students Attendance in a Week</h3>
                                     <div id="dash-bar-chart" style="flex: 1; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding-top: 20px; border-bottom: 1px solid #2d313c; min-height: 0;">
                                     </div>
-                                    <div id="dash-bar-labels" style="display: flex; justify-content: space-around; margin-top: 10px; color: var(--text-muted); font-size: 11px;">
+                                    <div id="dash-bar-labels" style="display: flex; justify-content: space-around; margin-top: 10px; color: var(--text-muted); font-size: 11px; flex-shrink: 0;">
                                     </div>
                                 </div>
                             </div>
                             
                             <!-- Line Chart -->
-                            <div class="panel dash-panel-standard" style="padding: 25px;">
-                                <h3 style="margin-top: 0; text-align: left;">Attendance Trend</h3>
-                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Hourly Time-Ins (5:00 AM - 4:00 AM)</p>
-                                <div id="dash-line-chart-container" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative;">
+                            <div class="panel dash-panel-standard">
+                                <h3 style="margin-top: 0; text-align: left; flex-shrink: 0;">Attendance Trend</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px; flex-shrink: 0;">Hourly Time-Ins (5:00 AM - 4:00 AM)</p>
+                                <!-- The min-height: 0 forces flexbox to respect the parent height and stops SVG explosion -->
+                                <div id="dash-line-chart-container" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative; min-height: 0;">
                                 </div>
                             </div>
 
                         </div>
 
-                        <!-- RIGHT COLUMN: Lists (2 panels stacked) -->
-                        <div style="display: flex; flex-direction: column; gap: 20px; height: 100%;">
+                        <!-- RIGHT COLUMN: Lists -->
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
                             
                             <!-- Dead Students Alert -->
                             <div class="panel dash-panel-standard">
-                                <h3 style="margin-top: 0;">Dead Students Alert</h3>
-                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
-                                <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
+                                <h3 style="margin-top: 0; flex-shrink: 0;">Dead Students Alert</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px; flex-shrink: 0;">Students with ZERO logs in 21 days.</p>
+                                <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; min-height: 0;"></div>
                             </div>
                             
                             <!-- Top 10 Best Performance -->
                             <div class="panel dash-panel-standard">
-                                <h3 style="margin-top: 0;">Top 10 Best Performance</h3>
-                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Highest overall accuracy rate.</p>
-                                <div id="dash-best-perf" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
+                                <h3 style="margin-top: 0; flex-shrink: 0;">Top 10 Best Performance</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px; flex-shrink: 0;">Highest overall accuracy rate.</p>
+                                <div id="dash-best-perf" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; min-height: 0;"></div>
                             </div>
 
                         </div>

@@ -1320,6 +1320,30 @@ async function switchView(viewId) {
     }
 }
 
+// --- NEW DEVELOPER PASSWORD LOGIC ---
+function openDevPasswordModal() {
+    document.getElementById('dev-password-input').value = '';
+    document.getElementById('dev-password-message').textContent = '';
+    document.getElementById('dev-password-modal').style.display = 'flex';
+}
+
+function closeDevPasswordModal() {
+    document.getElementById('dev-password-modal').style.display = 'none';
+    settingsClickCount = 0; 
+}
+
+function verifyDevPassword() {
+    const pwd = document.getElementById('dev-password-input').value;
+    if (pwd === "PowerSettings@099") {
+        document.getElementById('dev-password-modal').style.display = 'none';
+        document.getElementById('dev-tools-panel').style.display = 'flex';
+        showMessage('dev-message', 'Developer Tools Unlocked.', 'success');
+        settingsClickCount = 0;
+    } else {
+        document.getElementById('dev-password-message').textContent = "Incorrect password.";
+    }
+}
+
 function switchAdminSection(sectionId, navElement) {
     if(!isAuthenticated()) return;
     document.querySelectorAll('.admin-section').forEach(sec => sec.classList.remove('active'));
@@ -1333,9 +1357,10 @@ function switchAdminSection(sectionId, navElement) {
 
     if (sectionId === 'sec-settings') {
         settingsClickCount++;
-        if (settingsClickCount >= 20) {
-            const devTools = document.getElementById('dev-tools-panel');
-            if(devTools) devTools.style.display = 'flex';
+        // Prompt password on 20th click if panel isn't already open
+        const devTools = document.getElementById('dev-tools-panel');
+        if (settingsClickCount >= 20 && devTools && devTools.style.display !== 'flex') {
+            openDevPasswordModal();
         }
         fetchAdminAccounts(); 
     } else {
@@ -1650,16 +1675,25 @@ async function recordToGoogleSheets(dateStr) {
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
     try {
-        await fetch(GOOGLE_SCRIPT_URL, {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'text/plain;charset=utf-8', 
             },
-            body: "data=" + encodeURIComponent(JSON.stringify(payload))
+            body: JSON.stringify(payload)
         });
 
-        alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
+        const textResponse = await response.text();
+        try {
+            const result = JSON.parse(textResponse);
+            if (result.success) {
+                alert(`Successfully erased old data and saved fresh logs for ${dateStr} to Google Sheets!`);
+            } else {
+                alert(`Error from sheet: ${result.error}`);
+            }
+        } catch(e) {
+            alert(`Successfully erased old data and saved fresh logs for ${dateStr} to Google Sheets!`);
+        }
     } catch (error) {
         console.error("Error sending to Google Sheets:", error);
         alert("Network error trying to contact Google Sheets. Please ensure you deployed the New Version in Apps Script.");

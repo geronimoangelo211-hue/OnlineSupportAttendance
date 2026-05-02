@@ -28,6 +28,7 @@
             letter-spacing: 2px;
             text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
             margin: 0;
+            text-align: center;
         }
         
         /* STRICT PANEL SIZING: Forces a perfect grid and stops the SVG from exploding */
@@ -65,6 +66,16 @@
             <p style="color: var(--text-muted); margin-top: 10px;">Please wait for the Support Head to open the system.</p>
         </div>
 
+        <!-- NEW: Fullscreen Incognito Overlay -->
+        <div id="incognito-screen" class="system-locked-overlay" style="display: none; position: fixed; z-index: 9999;">
+            <span style="font-size: 4rem; margin-bottom: 10px;">🕵️‍♂️</span>
+            <h2 class="locked-text">Incognito Mode Detected</h2>
+            <p style="color: var(--text-main); margin-top: 15px; font-size: 1.1rem;">You are using Incognito / Private Browsing Mode.</p>
+            <p style="color: #f59e0b; font-size: 0.9rem; font-weight: bold; margin-top: 10px; background: rgba(245, 158, 11, 0.1); padding: 12px 20px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3);">
+                Incognito mode is strictly disabled to enforce device security limits. <br>Please switch to a normal browser window to continue.
+            </p>
+        </div>
+
         <div class="centered-panel" id="turn-in-form">
             <h3>Student Online Support</h3>
             <p>Enter your Student ID to log your attendance.</p>
@@ -98,12 +109,6 @@
             <h3 style="color: var(--error);">Shift Closed</h3>
             <p id="locked-message" style="color: var(--text-muted); margin-top: 10px;"></p>
             <button class="btn-primary" onclick="resetStudentUI()" style="margin-top: 25px;">Acknowledge</button>
-        </div>
-
-        <div class="centered-panel" id="incognito-screen" style="display: none; border-color: var(--error);">
-            <h3 style="color: var(--error); margin-top: 0; border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 10px;">Private Browsing Detected</h3>
-            <p style="color: var(--text-muted); margin-top: 15px;">Please switch to a normal browser window to log your attendance.</p>
-            <p style="color: #f59e0b; font-size: 0.85rem; font-weight: bold; margin-top: 15px; background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 6px;">Incognito mode is disabled to enforce device security limits.</p>
         </div>
     </main>
 
@@ -203,7 +208,7 @@
                                 </div>
                             </div>
                             
-                            <!-- UPDATED: Line Chart (Dual Lines + Legend) -->
+                            <!-- Line Chart -->
                             <div class="panel dash-panel-standard" style="padding: 25px;">
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-shrink: 0;">
                                     <h3 style="margin-top: 0; text-align: left;">Attendance Trend</h3>

@@ -54,7 +54,28 @@ async function pushLogsToCloud() {
 
 let pendingTimeOutStudent = null;
 let pendingTimeOutAction = null;
+let pendingTimeOutDate = null;
 let settingsClickCount = 0; 
+
+function getShiftDateDetails() {
+    const pht = getPHT();
+    const hour = pht.getHours();
+    
+    let shiftDate = new Date(pht);
+    if (hour >= 0 && hour < 5) {
+        shiftDate.setDate(shiftDate.getDate() - 1);
+    }
+    
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    return {
+        dateStr: shiftDate.toLocaleDateString('en-US'),
+        dayStr: days[shiftDate.getDay()],
+        hour: hour,
+        min: pht.getMinutes(),
+        realTimeStr: pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    };
+}
 
 const ACCENT_COLORS = {
     'Red': { hex: '#ef4444', rgb: '239, 68, 68' },
@@ -408,6 +429,84 @@ async function updateStudentGC() {
     renderDutyToday();
 }
 
+function openEditStudentModal(id) {
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const s = students.find(x => x.id === id);
+    if (!s) return;
+    
+    document.getElementById('edit-stu-orig-id').value = s.id;
+    document.getElementById('edit-stu-name').value = s.name || '';
+    document.getElementById('edit-stu-id').value = s.id;
+    
+    const gcSelect = document.getElementById('edit-stu-gc');
+    const gcOther = document.getElementById('edit-stu-gc-other');
+    
+    gcSelect.value = '';
+    gcOther.style.display = 'none';
+    gcOther.value = '';
+
+    if (s.gcHandle) {
+        const optionExists = Array.from(gcSelect.options).some(opt => opt.value === s.gcHandle);
+        if (optionExists) {
+            gcSelect.value = s.gcHandle;
+        } else {
+            gcSelect.value = 'Other';
+            gcOther.style.display = 'block';
+            gcOther.value = s.gcHandle;
+        }
+    }
+
+    document.getElementById('edit-student-modal').style.display = 'flex';
+}
+
+function toggleEditStudentOtherGC(val) {
+    const otherInput = document.getElementById('edit-stu-gc-other');
+    if (val === 'Other') {
+        otherInput.style.display = 'block';
+    } else {
+        otherInput.style.display = 'none';
+        otherInput.value = '';
+    }
+}
+
+function closeEditStudentModal() {
+    document.getElementById('edit-student-modal').style.display = 'none';
+}
+
+async function saveStudentEdit() {
+    const id = document.getElementById('edit-stu-orig-id').value;
+    const name = document.getElementById('edit-stu-name').value.trim();
+    let gc = document.getElementById('edit-stu-gc').value;
+    
+    if (gc === 'Other') {
+        gc = document.getElementById('edit-stu-gc-other').value.trim();
+    }
+
+    if (!name) {
+        alert("Name cannot be empty.");
+        return;
+    }
+
+    await pullFromCloud();
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const s = students.find(x => x.id === id);
+    
+    if (s) {
+        s.name = name;
+        s.gcHandle = gc;
+        localStorage.setItem('students', JSON.stringify(students));
+        await pushStudentsToCloud();
+        
+        renderStudents();
+        renderSchedule();
+        renderMainDashboard();
+        renderDashboardSummary();
+        renderDutyToday();
+    }
+    
+    closeEditStudentModal();
+}
+
 async function deleteStudent(idNum) {
     if (!confirm("Are you sure you want to remove this student? This will not delete their existing logs but will prevent them from logging in.")) return;
     
@@ -461,18 +560,17 @@ async function toggleStudentDay(id, day) {
     }
 }
 
-async function logAttendanceAction(student, action, endOfShiftDetails = null) {
+async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
     await pullFromCloud(); 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    const pht = getPHT();
-    const timeStr = pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const dateStr = pht.toLocaleDateString('en-US');
+    const shift = getShiftDateDetails();
+    const dateStr = overrideDateStr || shift.dateStr;
     
     logs.push({
         name: student.name,
         id: student.id,
         action: action,
-        time: timeStr,
+        time: shift.realTimeStr,
         date: dateStr,
         details: endOfShiftDetails 
     });
@@ -530,6 +628,35 @@ function deleteHistoryDate(dateStr, event) {
     }
 }
 
+async function toggleExempt(idNum, dateStr, isChecked) {
+    await pullFromCloud();
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    
+    if (isChecked) {
+        logs = logs.filter(l => !(l.id === idNum && l.date === dateStr));
+        const students = JSON.parse(localStorage.getItem('students')) || [];
+        const s = students.find(x => x.id === idNum);
+        if (s) {
+            logs.push({
+                name: s.name,
+                id: s.id,
+                action: 'Exempted',
+                time: 'Exempted',
+                date: dateStr,
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
+            });
+        }
+    } else {
+        logs = logs.filter(l => !(l.id === idNum && l.date === dateStr && l.action === 'Exempted'));
+    }
+    
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    await pushLogsToCloud();
+    
+    renderHistoryTable(dateStr);
+    renderMainDashboard();
+}
+
 async function devClearLogs() {
     if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
@@ -577,14 +704,14 @@ async function handleTimeIn() {
             return; 
         }
 
-        const currentDay = getPHTDayString();
+        const shift = getShiftDateDetails();
         if (!student.assignedDays || student.assignedDays.length === 0) {
             showMessage('student-message', 'You have no assigned schedule. Please contact the Support Head.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
             return;
         }
-        if (!student.assignedDays.includes(currentDay)) {
+        if (!student.assignedDays.includes(shift.dayStr)) {
             showMessage('student-message', `Access Denied: You are not scheduled for today. Your shifts are on: ${student.assignedDays.join(', ')}.`, 'error');
             initSliderCaptcha();
             checkDeviceLock();
@@ -592,27 +719,25 @@ async function handleTimeIn() {
         }
 
         const todayLogs = getTodayLogs(idNum);
-        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance')) {
+        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance' || l.action === 'Exempted')) {
             showMessage('student-message', 'You already have an attendance record for today.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
             return;
         }
 
-        const hour = getPHT().getHours();
-
-        if (hour < 7) {
-            showMessage('student-message', 'Time In opens at 7:00 AM.', 'error');
+        if (shift.hour < 5) {
+            showMessage('student-message', 'Time In opens at 5:00 AM.', 'error');
             initSliderCaptcha();
             return;
-        } else if (hour >= 19) { 
-            await logAttendanceAction(student, 'No Attendance');
-            showLockedScreen('You missed your Time In for today. You are marked as No Attendance.');
-        } else if (hour >= 9) { 
-            await logAttendanceAction(student, 'Time In (Late)');
+        } else if (shift.hour > 12 || (shift.hour === 12 && shift.min >= 1)) { 
+            await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
+            showLockedScreen('You missed your Time In. You are marked as No Attendance.');
+        } else if (shift.hour > 8 || (shift.hour === 8 && shift.min >= 1)) { 
+            await logAttendanceAction(student, 'Time In (Late)', null, shift.dateStr);
             showMessage('student-message', 'Successfully logged Time In (Late)', 'success');
         } else { 
-            await logAttendanceAction(student, 'Time In');
+            await logAttendanceAction(student, 'Time In', null, shift.dateStr);
             showMessage('student-message', 'Successfully logged Time In', 'success');
         }
         
@@ -659,30 +784,37 @@ async function handleTimeOut() {
             return; 
         }
 
-        const currentDay = getPHTDayString();
+        const shift = getShiftDateDetails();
         if (!student.assignedDays || student.assignedDays.length === 0) {
-            showMessage('student-message', 'You have no assigned schedule. Please contact the Support Head.', 'error');
+            showMessage('student-message', 'You have no assigned schedule.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
             return;
         }
-        if (!student.assignedDays.includes(currentDay)) {
-            showMessage('student-message', `Access Denied: You are not scheduled for today. Your shifts are on: ${student.assignedDays.join(', ')}.`, 'error');
+        if (!student.assignedDays.includes(shift.dayStr)) {
+            showMessage('student-message', `Access Denied: You are not scheduled for this shift.`, 'error');
             initSliderCaptcha();
             checkDeviceLock();
             return;
         }
 
         const todayLogs = getTodayLogs(idNum);
+        
+        if (todayLogs.some(l => l.action === 'Exempted')) {
+            showMessage('student-message', 'You are marked as Exempted for this shift.', 'error');
+            initSliderCaptcha();
+            checkDeviceLock();
+            return;
+        }
+
         const hasTimeIn = todayLogs.some(l => l.action.includes('Time In'));
-        const hour = getPHT().getHours();
 
         if (!hasTimeIn) {
-            if (hour >= 19) {
-                await logAttendanceAction(student, 'No Attendance');
-                showLockedScreen('You missed your Time In for today. You are marked as No Attendance.');
+            if (shift.hour > 12 || shift.hour < 5) {
+                await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
+                showLockedScreen('You missed your Time In for this shift. Marked as No Attendance.');
             } else {
-                showMessage('student-message', 'No Time In record found for today.', 'error');
+                showMessage('student-message', 'No Time In record found for this shift.', 'error');
                 initSliderCaptcha();
                 checkDeviceLock();
             }
@@ -690,21 +822,22 @@ async function handleTimeOut() {
         }
 
         if (todayLogs.some(l => l.action.includes('Time Out'))) {
-            showMessage('student-message', 'You have already timed out today.', 'error');
+            showMessage('student-message', 'You have already timed out for this shift.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
             return;
         }
 
-        if (hour < 19) {
-            showMessage('student-message', 'Time Out opens at 7:00 PM.', 'error');
+        if (shift.hour >= 5 && shift.hour < 17) {
+            showMessage('student-message', 'Time Out opens at 5:00 PM.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
             return;
         } 
 
         pendingTimeOutStudent = student;
-        pendingTimeOutAction = (hour >= 21) ? 'Time Out (Late)' : 'Time Out';
+        pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
+        pendingTimeOutDate = shift.dateStr; 
         
         document.getElementById('gc-handle').value = student.gcHandle || '';
         document.getElementById('gc-handle-other').style.display = 'none';
@@ -755,13 +888,14 @@ async function finalizeTimeOut() {
             gcHandle: gcHandle,
             announcement: announcement.value,
             whoPosted: whoPosted.value
-        });
+        }, pendingTimeOutDate);
 
         document.getElementById('timeout-modal').style.display = 'none';
         showMessage('student-message', `Successfully logged ${pendingTimeOutAction}`, 'success');
 
         pendingTimeOutStudent = null;
         pendingTimeOutAction = null;
+        pendingTimeOutDate = null;
         
         localStorage.removeItem('activeDeviceStudent');
         
@@ -775,28 +909,24 @@ async function finalizeTimeOut() {
 }
 
 function checkAndApplyAutoNoAttendance() {
-    const pht = getPHT();
-    if (pht.getHours() < 19) return false; 
+    const shift = getShiftDateDetails();
+    if (shift.hour < 12 || (shift.hour === 12 && shift.min === 0)) return false; 
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const todayStr = pht.toLocaleDateString('en-US');
-    const currentDay = getPHTDayString();
     
     let updated = false;
-    
-    const scheduledToday = students.filter(s => s.assignedDays && s.assignedDays.includes(currentDay));
+    const scheduledToday = students.filter(s => s.assignedDays && s.assignedDays.includes(shift.dayStr));
     
     scheduledToday.forEach(student => {
-        const hasLogToday = logs.some(l => l.id === student.id && l.date === todayStr);
+        const hasLogToday = logs.some(l => l.id === student.id && l.date === shift.dateStr);
         if (!hasLogToday) {
-            const timeStr = pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             logs.push({
                 name: student.name,
                 id: student.id,
                 action: 'No Attendance',
-                time: timeStr,
-                date: todayStr,
+                time: shift.realTimeStr,
+                date: shift.dateStr,
                 details: null
             });
             updated = true;
@@ -811,22 +941,21 @@ function checkAndApplyAutoNoAttendance() {
 }
 
 function checkAndApplyAutoTimeOut() {
-    const pht = getPHT();
-    const todayStr = pht.toLocaleDateString('en-US');
+    const shift = getShiftDateDetails();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     let updated = false;
 
     const uniqueDates = [...new Set(logs.map(l => l.date))];
 
     uniqueDates.forEach(dateStr => {
-        if (dateStr !== todayStr) {
+        if (dateStr !== shift.dateStr) {
             const dayLogs = logs.filter(l => l.date === dateStr);
             const studentIds = [...new Set(dayLogs.map(l => l.id))];
 
             studentIds.forEach(id => {
                 const sLogs = dayLogs.filter(l => l.id === id);
                 const hasTimeIn = sLogs.some(l => l.action.includes('Time In'));
-                const hasTimeOut = sLogs.some(l => l.action.includes('Time Out'));
+                const hasTimeOut = sLogs.some(l => l.action.includes('Time Out') || l.action === 'Exempted');
 
                 if (hasTimeIn && !hasTimeOut) {
                     const studentName = sLogs[0].name;
@@ -857,7 +986,6 @@ function checkAndApplyAutoTimeOut() {
 }
 
 function enforceHistoryLimit() {
-    
 }
 
 function renderStudents() {
@@ -885,9 +1013,10 @@ function renderStudents() {
                 <div><span style="font-weight: bold; color: var(--text-main);">${student.name}</span> ${gcTag}</div>
                 <span style="font-size: 0.8rem; color: var(--text-muted);">ID: ${student.id}</span>
             </div>
-            <button onclick="viewPerformance('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">
-                VIEW PERFORMANCE
-            </button>
+            <div style="display: flex; gap: 5px;">
+                <button onclick="openEditStudentModal('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">EDIT</button>
+                <button onclick="viewPerformance('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">VIEW PERF</button>
+            </div>
         `;
         list.appendChild(li);
     });
@@ -1043,8 +1172,9 @@ function renderLogs() {
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    const todayStr = getPHT().toLocaleDateString('en-US');
-    const currentDay = getPHTDayString();
+    const shift = getShiftDateDetails();
+    const todayStr = shift.dateStr;
+    const currentDay = shift.dayStr;
     const logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
 
     logsWithIndex.reverse().filter(log => {
@@ -1062,9 +1192,10 @@ function renderLogs() {
         else if (log.action.includes('In')) statusColor = 'var(--success)';
         else if (log.action.includes('Out')) statusColor = 'var(--error)';
         else if (log.action === 'No Attendance') statusColor = '#6b7280';
+        else if (log.action === 'Exempted') statusColor = '#66fcf1';
 
         let todayShiftBtn = '';
-        if (log.action.includes('Out') && log.details) {
+        if ((log.action.includes('Out') || log.action === 'Exempted') && log.details) {
             todayShiftBtn = `<button onclick="viewTodayShift('${log.id}', '${log.date}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 5px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; border: 1px solid var(--accent); margin-right: 8px; cursor: pointer;">TODAY SHIFT</button>`;
         }
 
@@ -1090,8 +1221,9 @@ function renderDutyToday() {
     const dutyList = document.getElementById('duty-today-list');
     if (!dutyList) return;
 
-    const currentDay = getPHTDayString();
-    const todayStr = getPHT().toLocaleDateString('en-US');
+    const shift = getShiftDateDetails();
+    const currentDay = shift.dayStr;
+    const todayStr = shift.dateStr;
 
     const scheduledToday = students.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
     scheduledToday.sort((a, b) => a.name.localeCompare(b.name));
@@ -1105,7 +1237,7 @@ function renderDutyToday() {
 
     scheduledToday.forEach(student => {
         const hasTimedIn = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('In'));
-        const hasTimedOut = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('Out'));
+        const hasTimedOut = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action === 'Exempted'));
 
         let statusDot = '#f59e0b'; 
         if (hasTimedOut) {
@@ -1129,7 +1261,8 @@ function renderDutyToday() {
 
 function exportToExcel(dateStr = null) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    const targetDate = dateStr || getPHT().toLocaleDateString('en-US');
+    const shift = getShiftDateDetails();
+    const targetDate = dateStr || shift.dateStr;
     const targetLogs = logs.filter(l => l.date === targetDate);
 
     if (targetLogs.length === 0) {
@@ -1150,6 +1283,7 @@ function exportToExcel(dateStr = null) {
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
         let inText = '--';
         let outText = '--';
@@ -1157,7 +1291,10 @@ function exportToExcel(dateStr = null) {
         let ann = '';
         let post = '';
 
-        if (noAttLog) {
+        if (exemptLog) {
+            inText = 'Exempted';
+            outText = 'Exempted';
+        } else if (noAttLog) {
             inText = 'No Attendance';
             outText = 'No Attendance';
         } else {
@@ -1237,8 +1374,8 @@ function getPHTDayString() {
 
 function getTodayLogs(idNum) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    const todayStr = getPHT().toLocaleDateString('en-US');
-    return logs.filter(l => l.id === idNum && l.date === todayStr);
+    const shift = getShiftDateDetails();
+    return logs.filter(l => l.id === idNum && l.date === shift.dateStr);
 }
 
 function showLockedScreen(message) {
@@ -1398,6 +1535,7 @@ function renderHistoryTable(dateStr) {
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
         let inText = '--';
         let outText = '--';
@@ -1405,7 +1543,10 @@ function renderHistoryTable(dateStr) {
         let ann = '-';
         let post = '-';
 
-        if (noAttLog) {
+        if (exemptLog) {
+            inText = '<span style="color: #66fcf1;">Exempted</span>';
+            outText = '<span style="color: #66fcf1;">Exempted</span>';
+        } else if (noAttLog) {
             inText = '<span style="color: var(--error);">No Attendance</span>';
             outText = '<span style="color: var(--error);">No Attendance</span>';
         } else {
@@ -1424,6 +1565,9 @@ function renderHistoryTable(dateStr) {
             }
         }
 
+        const isExempted = studentLogs.some(l => l.action === 'Exempted');
+        const checkedAttr = isExempted ? 'checked' : '';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${name}</td>
@@ -1433,6 +1577,7 @@ function renderHistoryTable(dateStr) {
             <td style="color: var(--text-muted);">${gc}</td>
             <td style="color: var(--text-muted);">${ann}</td>
             <td style="color: var(--text-muted);">${post}</td>
+            <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this.checked)" ${checkedAttr}></td>
         `;
         tbody.appendChild(tr);
     });
@@ -1500,8 +1645,9 @@ function renderMainDashboard() {
     try {
         const students = JSON.parse(localStorage.getItem('students')) || [];
         const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-        const todayStr = getPHT().toLocaleDateString('en-US');
-        const currentDay = getPHTDayString();
+        const shift = getShiftDateDetails();
+        const todayStr = shift.dateStr;
+        const currentDay = shift.dayStr;
 
         document.getElementById('dash-total').textContent = students.length;
 
@@ -1513,7 +1659,7 @@ function renderMainDashboard() {
 
         scheduledToday.forEach(student => {
             const studentTodayLogs = logs.filter(l => l.id === student.id && l.date === todayStr);
-            const timeInLog = studentTodayLogs.find(l => l.action.includes('In'));
+            const timeInLog = studentTodayLogs.find(l => l.action.includes('In') || l.action === 'Exempted');
             
             if (timeInLog) {
                 presentCount++;
@@ -1556,7 +1702,7 @@ function renderMainDashboard() {
                 let dStr = d.toLocaleDateString('en-US');
                 let dayIdx = d.getDay();
                 
-                let pCount = logs.filter(l => l.date === dStr && l.action.includes('In')).length;
+                let pCount = logs.filter(l => l.date === dStr && (l.action.includes('In') || l.action === 'Exempted')).length;
                 weeklyData.push({ dayLabel: dayNames[dayIdx], count: pCount });
             }
             
@@ -1654,8 +1800,9 @@ function renderDashboardSummary() {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    const todayStr = getPHT().toLocaleDateString('en-US');
-    const currentDay = getPHTDayString();
+    const shift = getShiftDateDetails();
+    const todayStr = shift.dateStr;
+    const currentDay = shift.dayStr;
 
     const scheduledToday = students.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
 
@@ -1665,7 +1812,7 @@ function renderDashboardSummary() {
     );
 
     filteredStudents.forEach(student => {
-        const hasTimedOutToday = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('Out'));
+        const hasTimedOutToday = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action === 'Exempted'));
         const hasTimedInToday = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('In'));
         
         let todayShiftBtn = '';
@@ -1778,15 +1925,18 @@ function viewTodayShift(idNum, dateStr) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
     const dayLogs = logs.filter(l => l.id === idNum && l.date === dateStr);
-    const timeInLog = dayLogs.find(l => l.action.includes('In'));
-    const timeOutLog = dayLogs.find(l => l.action.includes('Out'));
+    const timeInLog = dayLogs.find(l => l.action.includes('In') || l.action === 'Exempted');
+    const timeOutLog = dayLogs.find(l => l.action.includes('Out') || l.action === 'Exempted');
     
     if (!timeOutLog) return; 
     
     document.getElementById('ts-name').textContent = timeOutLog.name;
     
     const inEl = document.getElementById('ts-time-in');
-    if (timeInLog) {
+    if (timeInLog && timeInLog.action === 'Exempted') {
+        inEl.textContent = 'Exempted';
+        inEl.style.color = '#66fcf1';
+    } else if (timeInLog) {
         inEl.textContent = `${timeInLog.time} (${timeInLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
         inEl.style.color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
     } else {
@@ -1795,8 +1945,13 @@ function viewTodayShift(idNum, dateStr) {
     }
 
     const outEl = document.getElementById('ts-time-out');
-    outEl.textContent = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
-    outEl.style.color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+    if (timeOutLog.action === 'Exempted') {
+        outEl.textContent = 'Exempted';
+        outEl.style.color = '#66fcf1';
+    } else {
+        outEl.textContent = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
+        outEl.style.color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+    }
     
     const details = timeOutLog.details || {};
     document.getElementById('ts-gc').textContent = details.gcHandle || 'Not Provided';

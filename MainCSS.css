@@ -373,7 +373,6 @@ tr:hover { background: rgba(255,255,255,0.02); }
     justify-content: center;
     align-items: center;
     
-    /* Reverse the 80% body zoom safely for modal overlays */
     transform: scale(1.25);
     transform-origin: top left;
 }
@@ -428,7 +427,8 @@ tr:hover { background: rgba(255,255,255,0.02); }
     gap: 8px;
 }
 
-.radio-group input[type="radio"] {
+.radio-group input[type="radio"],
+input[type="checkbox"] {
     width: 16px;
     height: 16px;
     margin: 0;

@@ -663,14 +663,16 @@ function toggleExempt(idNum, dateStr, checkbox) {
         pendingExemptId = idNum;
         pendingExemptDate = dateStr;
         pendingExemptCheckbox = checkbox;
-        document.getElementById('exempt-modal').style.display = 'flex';
+        const modal = document.getElementById('exempt-modal');
+        if (modal) modal.style.display = 'flex';
     } else {
         removeExemptions(idNum, dateStr);
     }
 }
 
 function closeExemptModal() {
-    document.getElementById('exempt-modal').style.display = 'none';
+    const modal = document.getElementById('exempt-modal');
+    if (modal) modal.style.display = 'none';
     if (pendingExemptCheckbox) {
         pendingExemptCheckbox.checked = false;
     }
@@ -724,7 +726,8 @@ async function applyExempt(type) {
         renderMainDashboard();
     }
     
-    document.getElementById('exempt-modal').style.display = 'none';
+    const modal = document.getElementById('exempt-modal');
+    if (modal) modal.style.display = 'none';
     pendingExemptId = null;
     pendingExemptDate = null;
     pendingExemptCheckbox = null;
@@ -835,9 +838,11 @@ async function handleTimeIn() {
     }
 
     const timeInBtn = document.querySelector('.btn-in');
-    timeInBtn.textContent = "PROCESSING...";
-    timeInBtn.disabled = true;
-    timeInBtn.style.opacity = "0.7";
+    if(timeInBtn) {
+        timeInBtn.textContent = "PROCESSING...";
+        timeInBtn.disabled = true;
+        timeInBtn.style.opacity = "0.7";
+    }
 
     try {
         await pullFromCloud();
@@ -893,9 +898,11 @@ async function handleTimeIn() {
         checkDeviceLock(); 
 
     } finally {
-        timeInBtn.textContent = "Time In";
-        timeInBtn.disabled = false;
-        timeInBtn.style.opacity = "1";
+        if(timeInBtn) {
+            timeInBtn.textContent = "Time In";
+            timeInBtn.disabled = false;
+            timeInBtn.style.opacity = "1";
+        }
     }
 }
 
@@ -915,9 +922,11 @@ async function handleTimeOut() {
     }
 
     const timeOutBtn = document.querySelector('.btn-out');
-    timeOutBtn.textContent = "PROCESSING...";
-    timeOutBtn.disabled = true;
-    timeOutBtn.style.opacity = "0.7";
+    if(timeOutBtn) {
+        timeOutBtn.textContent = "PROCESSING...";
+        timeOutBtn.disabled = true;
+        timeOutBtn.style.opacity = "0.7";
+    }
 
     try {
         await pullFromCloud();
@@ -1000,12 +1009,15 @@ async function handleTimeOut() {
         document.querySelectorAll('input[name="who-posted"]').forEach(r => r.checked = false);
         document.getElementById('timeout-modal-message').textContent = '';
         
-        document.getElementById('timeout-modal').style.display = 'flex';
+        const modal = document.getElementById('timeout-modal');
+        if (modal) modal.style.display = 'flex';
 
     } finally {
-        timeOutBtn.textContent = "Time Out";
-        timeOutBtn.disabled = false;
-        timeOutBtn.style.opacity = "1";
+        if(timeOutBtn) {
+            timeOutBtn.textContent = "Time Out";
+            timeOutBtn.disabled = false;
+            timeOutBtn.style.opacity = "1";
+        }
     }
 }
 
@@ -1026,9 +1038,11 @@ async function finalizeTimeOut() {
     }
 
     const submitBtn = document.querySelector('#timeout-modal .btn-primary');
-    submitBtn.textContent = "SAVING...";
-    submitBtn.disabled = true;
-    submitBtn.style.opacity = "0.7";
+    if(submitBtn) {
+        submitBtn.textContent = "SAVING...";
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = "0.7";
+    }
 
     try {
         await logAttendanceAction(pendingTimeOutStudent, pendingTimeOutAction, {
@@ -1037,7 +1051,8 @@ async function finalizeTimeOut() {
             whoPosted: whoPosted.value
         }, pendingTimeOutDate);
 
-        document.getElementById('timeout-modal').style.display = 'none';
+        const modal = document.getElementById('timeout-modal');
+        if (modal) modal.style.display = 'none';
         showMessage('student-message', `Successfully logged ${pendingTimeOutAction}`, 'success');
 
         pendingTimeOutStudent = null;
@@ -1049,9 +1064,11 @@ async function finalizeTimeOut() {
         initSliderCaptcha(); 
         checkDeviceLock(); 
     } finally {
-        submitBtn.textContent = "Submit & Time Out";
-        submitBtn.disabled = false;
-        submitBtn.style.opacity = "1";
+        if(submitBtn) {
+            submitBtn.textContent = "Submit & Time Out";
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = "1";
+        }
     }
 }
 
@@ -1199,8 +1216,9 @@ function loadAccentColor() {
 }
 
 function togglePortal() {
-    const currentView = document.querySelector('.view.active').id;
-    if (currentView === 'student-view') {
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return;
+    if (currentView.id === 'student-view') {
         switchView('admin-login-view');
     } else {
         switchView('student-view');
@@ -1209,19 +1227,26 @@ function togglePortal() {
 
 async function switchView(viewId) {
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-    document.getElementById(viewId).classList.add('active');
+    const targetView = document.getElementById(viewId);
+    if(targetView) targetView.classList.add('active');
     
     document.querySelectorAll('.message').forEach(msg => msg.textContent = '');
     
     if (viewId === 'student-view') {
         const isPrivate = await isIncognito();
         if (isPrivate) {
-            document.getElementById('turn-in-form').style.display = 'none';
-            document.getElementById('locked-screen').style.display = 'none';
-            document.getElementById('incognito-screen').style.display = 'block';
+            const form = document.getElementById('turn-in-form');
+            const locked = document.getElementById('locked-screen');
+            const incognito = document.getElementById('incognito-screen');
+            if(form) form.style.display = 'none';
+            if(locked) locked.style.display = 'none';
+            if(incognito) incognito.style.display = 'block';
         } else {
-            document.getElementById('incognito-screen').style.display = 'none';
-            document.getElementById('turn-in-form').style.display = 'block';
+            const form = document.getElementById('turn-in-form');
+            const locked = document.getElementById('locked-screen');
+            const incognito = document.getElementById('incognito-screen');
+            if(incognito) incognito.style.display = 'none';
+            if(form) form.style.display = 'block';
             checkDeviceLock(); 
             setTimeout(initSliderCaptcha, 50); 
         }
@@ -1231,8 +1256,10 @@ async function switchView(viewId) {
     
     if (viewId === 'admin-dashboard-view') {
         document.body.classList.remove('portal-mode'); 
-        document.getElementById('main-header').style.display = 'none';
-        document.getElementById('mobile-header').style.display = 'none';
+        const mh = document.getElementById('main-header');
+        const moh = document.getElementById('mobile-header');
+        if(mh) mh.style.display = 'none';
+        if(moh) moh.style.display = 'none';
         
         enforceHistoryLimit();
         renderStudents();
@@ -1241,8 +1268,10 @@ async function switchView(viewId) {
         renderDutyToday(); 
     } else {
         document.body.classList.add('portal-mode'); 
-        document.getElementById('main-header').style.display = 'flex';
-        document.getElementById('mobile-header').style.display = 'flex';
+        const mh = document.getElementById('main-header');
+        const moh = document.getElementById('mobile-header');
+        if(mh) mh.style.display = 'flex';
+        if(moh) moh.style.display = 'flex';
         
         document.querySelectorAll('.portal-toggle-btn').forEach(btn => {
             btn.textContent = viewId === 'student-view' ? 'Support Head Portal' : 'Student Portal';
@@ -1252,7 +1281,8 @@ async function switchView(viewId) {
 
 function switchAdminSection(sectionId, navElement) {
     document.querySelectorAll('.admin-section').forEach(sec => sec.classList.remove('active'));
-    document.getElementById(sectionId).classList.add('active');
+    const sec = document.getElementById(sectionId);
+    if(sec) sec.classList.add('active');
     
     document.querySelectorAll('.admin-nav-item').forEach(item => item.classList.remove('active'));
     if(navElement) navElement.classList.add('active');
@@ -1262,7 +1292,8 @@ function switchAdminSection(sectionId, navElement) {
     if (sectionId === 'sec-settings') {
         settingsClickCount++;
         if (settingsClickCount >= 20) {
-            document.getElementById('dev-tools-panel').style.display = 'flex';
+            const devTools = document.getElementById('dev-tools-panel');
+            if(devTools) devTools.style.display = 'flex';
         }
         fetchAdminAccounts(); 
     } else {
@@ -1273,7 +1304,8 @@ function switchAdminSection(sectionId, navElement) {
     if (sectionId === 'sec-dashboard') renderMainDashboard();
     if (sectionId === 'sec-history') renderHistoryView();
     if (sectionId === 'sec-attendance') {
-        document.getElementById('tab-btn-summary').click();
+        const tabSum = document.getElementById('tab-btn-summary');
+        if(tabSum) tabSum.click();
         renderDashboardSummary();
         renderDutyToday(); 
     }
@@ -1286,22 +1318,23 @@ function switchAttendanceTab(tab) {
     const btnLogs = document.getElementById('tab-btn-logs');
 
     if (tab === 'summary') {
-        paneSummary.style.display = 'flex';
-        paneLogs.style.display = 'none';
-        btnSummary.classList.add('active');
-        btnLogs.classList.remove('active');
+        if(paneSummary) paneSummary.style.display = 'flex';
+        if(paneLogs) paneLogs.style.display = 'none';
+        if(btnSummary) btnSummary.classList.add('active');
+        if(btnLogs) btnLogs.classList.remove('active');
         renderDashboardSummary();
     } else {
-        paneSummary.style.display = 'none';
-        paneLogs.style.display = 'flex';
-        btnSummary.classList.remove('active');
-        btnLogs.classList.add('active');
+        if(paneSummary) paneSummary.style.display = 'none';
+        if(paneLogs) paneLogs.style.display = 'flex';
+        if(btnSummary) btnSummary.classList.remove('active');
+        if(btnLogs) btnLogs.classList.add('active');
         renderLogs();
     }
 }
 
 function handleGlobalSearch() {
-    if (document.getElementById('att-pane-summary').style.display !== 'none') {
+    const attPane = document.getElementById('att-pane-summary');
+    if (attPane && attPane.style.display !== 'none') {
         renderDashboardSummary();
     } else {
         renderLogs();
@@ -1496,10 +1529,13 @@ async function recordToGoogleSheets(dateStr) {
     const targetLogs = logs.filter(l => l.date === dateStr);
 
     const sheetBtn = document.getElementById('history-sheet-btn');
-    const originalText = sheetBtn.textContent;
-    sheetBtn.textContent = "SENDING...";
-    sheetBtn.disabled = true;
-    sheetBtn.style.opacity = "0.5";
+    const originalText = sheetBtn ? sheetBtn.textContent : "Record Today Google Sheets";
+    
+    if (sheetBtn) {
+        sheetBtn.textContent = "SENDING...";
+        sheetBtn.disabled = true;
+        sheetBtn.style.opacity = "0.5";
+    }
 
     const payload = [];
     const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
@@ -1560,39 +1596,38 @@ async function recordToGoogleSheets(dateStr) {
         });
     });
 
-    const GOOGLE_SCRIPT_URL = "YOUR_WEB_APP_URL_HERE";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/a/macros/phinmaed.com/s/AKfycbxvWsoWHaCDcmkIG4xn_CSneippJsflZe1oQBciplMiNNCuwvJj0ibiTmuHg2ojDNWA/exec";
 
     try {
-        const response = await fetch(GOOGLE_SCRIPT_URL, {
+        await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
+            mode: 'no-cors', 
             body: JSON.stringify(payload),
             headers: {
-                'Content-Type': 'text/plain;charset=utf-8', 
+                'Content-Type': 'application/json' 
             }
         });
 
-        const result = await response.json();
-
-        if (result.success) {
-            alert(`Successfully recorded logs for ${dateStr} to Google Sheets!`);
-        } else {
-            alert(`Failed to record: ${result.error}`);
-        }
+        alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
     } catch (error) {
         console.error("Error sending to Google Sheets:", error);
         alert("Network error trying to contact Google Sheets.");
     } finally {
-        sheetBtn.textContent = originalText;
-        sheetBtn.disabled = false;
-        sheetBtn.style.opacity = "1";
+        if (sheetBtn) {
+            sheetBtn.textContent = originalText;
+            sheetBtn.disabled = false;
+            sheetBtn.style.opacity = "1";
+        }
     }
 }
 
 function showMessage(elementId, text, type) {
     const msgElement = document.getElementById(elementId);
-    msgElement.textContent = text;
-    msgElement.className = `message ${type}`;
-    setTimeout(() => { msgElement.textContent = ''; }, 4000);
+    if(msgElement) {
+        msgElement.textContent = text;
+        msgElement.className = `message ${type}`;
+        setTimeout(() => { msgElement.textContent = ''; }, 4000);
+    }
 }
 
 function getPHT() {
@@ -1630,26 +1665,38 @@ function getTodayLogs(idNum) {
 }
 
 function showLockedScreen(message) {
-    document.getElementById('turn-in-form').style.display = 'none';
-    document.getElementById('locked-screen').style.display = 'block';
-    document.getElementById('locked-message').textContent = message;
+    const form = document.getElementById('turn-in-form');
+    const locked = document.getElementById('locked-screen');
+    const msg = document.getElementById('locked-message');
+    if(form) form.style.display = 'none';
+    if(locked) locked.style.display = 'block';
+    if(msg) msg.textContent = message;
 }
 
 async function resetStudentUI() {
     const isPrivate = await isIncognito();
     if (isPrivate) {
-        document.getElementById('turn-in-form').style.display = 'none';
-        document.getElementById('locked-screen').style.display = 'none';
-        document.getElementById('incognito-screen').style.display = 'block';
+        const form = document.getElementById('turn-in-form');
+        const locked = document.getElementById('locked-screen');
+        const incognito = document.getElementById('incognito-screen');
+        if(form) form.style.display = 'none';
+        if(locked) locked.style.display = 'none';
+        if(incognito) incognito.style.display = 'block';
         return;
     }
     
-    document.getElementById('turn-in-form').style.display = 'block';
-    document.getElementById('locked-screen').style.display = 'none';
-    document.getElementById('incognito-screen').style.display = 'none';
+    const form = document.getElementById('turn-in-form');
+    const locked = document.getElementById('locked-screen');
+    const incognito = document.getElementById('incognito-screen');
+    const idInput = document.getElementById('student-id-input');
+    const msg = document.getElementById('student-message');
     
-    document.getElementById('student-id-input').value = '';
-    document.getElementById('student-message').textContent = '';
+    if(form) form.style.display = 'block';
+    if(locked) locked.style.display = 'none';
+    if(incognito) incognito.style.display = 'none';
+    
+    if(idInput) idInput.value = '';
+    if(msg) msg.textContent = '';
     
     checkDeviceLock();
     initSliderCaptcha();
@@ -1753,7 +1800,8 @@ function renderHistoryView() {
 
     if (displayDates.length === 0) {
         container.innerHTML = '<p class="placeholder-text">No history available yet.</p>';
-        document.getElementById('history-table-container').style.display = 'none';
+        const tbl = document.getElementById('history-table-container');
+        if(tbl) tbl.style.display = 'none';
         return;
     }
 
@@ -1769,18 +1817,24 @@ function renderHistoryView() {
         container.appendChild(card);
     });
     
-    document.getElementById('history-table-container').style.display = 'none';
+    const tbl = document.getElementById('history-table-container');
+    if(tbl) tbl.style.display = 'none';
 }
 
 function renderHistoryTable(dateStr) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dayLogs = logs.filter(l => l.date === dateStr);
     
-    document.getElementById('history-table-container').style.display = 'flex';
-    document.getElementById('history-table-title').textContent = `Logs for ${dateStr}`;
+    const container = document.getElementById('history-table-container');
+    const title = document.getElementById('history-table-title');
+    if(container) container.style.display = 'flex';
+    if(title) title.textContent = `Logs for ${dateStr}`;
     
-    document.getElementById('history-export-btn').onclick = () => exportToExcel(dateStr);
-    document.getElementById('history-sheet-btn').onclick = () => recordToGoogleSheets(dateStr);
+    const exportBtn = document.getElementById('history-export-btn');
+    if (exportBtn) exportBtn.onclick = () => exportToExcel(dateStr);
+    
+    const sheetBtn = document.getElementById('history-sheet-btn');
+    if (sheetBtn) sheetBtn.onclick = () => recordToGoogleSheets(dateStr);
     
     const exemptAllBtn = document.getElementById('history-exempt-all-btn');
     if (exemptAllBtn) {
@@ -1788,6 +1842,7 @@ function renderHistoryTable(dateStr) {
     }
     
     const tbody = document.getElementById('history-logs-body');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     const studentIds = new Set(dayLogs.map(l => l.id));
@@ -1855,9 +1910,13 @@ function initDevUI() {
     const dTime = localStorage.getItem('devTimeOverride');
     const dDay = localStorage.getItem('devDayOverride');
     
-    if(dDate) document.getElementById('dev-date').value = dDate;
-    if(dTime) document.getElementById('dev-time').value = dTime;
-    if(dDay) document.getElementById('dev-day').value = dDay;
+    const dDateInput = document.getElementById('dev-date');
+    const dTimeInput = document.getElementById('dev-time');
+    const dDayInput = document.getElementById('dev-day');
+    
+    if(dDate && dDateInput) dDateInput.value = dDate;
+    if(dTime && dTimeInput) dTimeInput.value = dTime;
+    if(dDay && dDayInput) dDayInput.value = dDay;
 }
 
 function applyDevSettings() {
@@ -1883,7 +1942,8 @@ function applyDevSettings() {
         renderSchedule();
         renderMainDashboard();
         renderDutyToday();
-        if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
+        const secHist = document.getElementById('sec-history');
+        if (secHist && secHist.classList.contains('active')) renderHistoryView();
     }
 }
 
@@ -1892,9 +1952,12 @@ function resetDevSettings() {
     localStorage.removeItem('devTimeOverride');
     localStorage.removeItem('devDayOverride');
     
-    document.getElementById('dev-date').value = '';
-    document.getElementById('dev-time').value = '';
-    document.getElementById('dev-day').value = '';
+    const dDate = document.getElementById('dev-date');
+    const dTime = document.getElementById('dev-time');
+    const dDay = document.getElementById('dev-day');
+    if(dDate) dDate.value = '';
+    if(dTime) dTime.value = '';
+    if(dDay) dDay.value = '';
     
     showMessage('dev-message', 'System reverted back to reality.', 'success');
     
@@ -1904,7 +1967,8 @@ function resetDevSettings() {
         renderSchedule();
         renderMainDashboard();
         renderDutyToday();
-        if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
+        const secHist = document.getElementById('sec-history');
+        if (secHist && secHist.classList.contains('active')) renderHistoryView();
     }
 }
 
@@ -1916,7 +1980,8 @@ function renderMainDashboard() {
         const todayStr = shift.dateStr;
         const currentDay = shift.dayStr;
 
-        document.getElementById('dash-total').textContent = students.length;
+        const dashTotal = document.getElementById('dash-total');
+        if(dashTotal) dashTotal.textContent = students.length;
 
         const scheduledToday = students.filter(s => s.assignedDays && s.assignedDays.includes(currentDay));
         const totalScheduled = scheduledToday.length;
@@ -1939,11 +2004,17 @@ function renderMainDashboard() {
         const absentCount = totalScheduled - presentCount;
         const attendanceRate = totalScheduled > 0 ? Math.round((presentCount / totalScheduled) * 100) : 0;
 
-        document.getElementById('dash-ratio').textContent = `${presentCount} / ${totalScheduled}`;
-        document.getElementById('dash-rate').textContent = `${attendanceRate}%`;
-        document.getElementById('dash-present').textContent = presentCount;
-        document.getElementById('dash-absent').textContent = absentCount;
-        document.getElementById('dash-late').textContent = lateCount;
+        const dashRatio = document.getElementById('dash-ratio');
+        const dashRate = document.getElementById('dash-rate');
+        const dashPresent = document.getElementById('dash-present');
+        const dashAbsent = document.getElementById('dash-absent');
+        const dashLate = document.getElementById('dash-late');
+        
+        if(dashRatio) dashRatio.textContent = `${presentCount} / ${totalScheduled}`;
+        if(dashRate) dashRate.textContent = `${attendanceRate}%`;
+        if(dashPresent) dashPresent.textContent = presentCount;
+        if(dashAbsent) dashAbsent.textContent = absentCount;
+        if(dashLate) dashLate.textContent = lateCount;
 
         const pieChart = document.getElementById('dash-pie-chart');
         if (totalScheduled > 0 && pieChart) {
@@ -2151,40 +2222,53 @@ function viewPerformance(idNum) {
     perfRate = Math.round(perfRate);
     if (perfRate > 100) perfRate = 100;
 
-    document.getElementById('perf-student-name').textContent = student.name;
-    document.getElementById('perf-total-present').textContent = totalPresent;
-    document.getElementById('perf-on-time').textContent = onTimeIn;
-    document.getElementById('perf-late-in').textContent = lateIn;
-    document.getElementById('perf-out-time').textContent = onTimeOut;
-    document.getElementById('perf-late-out').textContent = lateOut;
+    const perfStudentName = document.getElementById('perf-student-name');
+    const perfTotalPresent = document.getElementById('perf-total-present');
+    const perfOnTime = document.getElementById('perf-on-time');
+    const perfLateIn = document.getElementById('perf-late-in');
+    const perfOutTime = document.getElementById('perf-out-time');
+    const perfLateOut = document.getElementById('perf-late-out');
+    
+    if(perfStudentName) perfStudentName.textContent = student.name;
+    if(perfTotalPresent) perfTotalPresent.textContent = totalPresent;
+    if(perfOnTime) perfOnTime.textContent = onTimeIn;
+    if(perfLateIn) perfLateIn.textContent = lateIn;
+    if(perfOutTime) perfOutTime.textContent = onTimeOut;
+    if(perfLateOut) perfLateOut.textContent = lateOut;
     
     const rateEl = document.getElementById('perf-rate');
-    rateEl.textContent = `${perfRate}%`;
-    
-    if (perfRate >= 80) rateEl.style.color = 'var(--success)';
-    else if (perfRate >= 50) rateEl.style.color = '#f59e0b';
-    else rateEl.style.color = 'var(--error)';
+    if(rateEl) {
+        rateEl.textContent = `${perfRate}%`;
+        if (perfRate >= 80) rateEl.style.color = 'var(--success)';
+        else if (perfRate >= 50) rateEl.style.color = '#f59e0b';
+        else rateEl.style.color = 'var(--error)';
+    }
 
-    document.getElementById('performance-modal').style.display = 'flex';
+    const modal = document.getElementById('performance-modal');
+    if(modal) modal.style.display = 'flex';
 }
 
 function closePerformanceModal() {
-    document.getElementById('performance-modal').style.display = 'none';
+    const modal = document.getElementById('performance-modal');
+    if(modal) modal.style.display = 'none';
 }
 
 function cancelTimeOut() {
     pendingTimeOutStudent = null;
     pendingTimeOutAction = null;
-    document.getElementById('timeout-modal').style.display = 'none';
+    const modal = document.getElementById('timeout-modal');
+    if(modal) modal.style.display = 'none';
 }
 
 function toggleOtherGC(val) {
     const otherInput = document.getElementById('gc-handle-other');
-    if (val === 'Other') {
-        otherInput.style.display = 'block';
-    } else {
-        otherInput.style.display = 'none';
-        otherInput.value = ''; 
+    if(otherInput) {
+        if (val === 'Other') {
+            otherInput.style.display = 'block';
+        } else {
+            otherInput.style.display = 'none';
+            otherInput.value = ''; 
+        }
     }
 }
 
@@ -2197,39 +2281,50 @@ function viewTodayShift(idNum, dateStr) {
     
     if (!timeOutLog) return; 
     
-    document.getElementById('ts-name').textContent = timeOutLog.name;
+    const tsName = document.getElementById('ts-name');
+    if(tsName) tsName.textContent = timeOutLog.name;
     
     const inEl = document.getElementById('ts-time-in');
-    if (timeInLog && timeInLog.action.includes('Exempted')) {
-        inEl.textContent = 'Exempted';
-        inEl.style.color = '#66fcf1';
-    } else if (timeInLog) {
-        inEl.textContent = `${timeInLog.time} (${timeInLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
-        inEl.style.color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-    } else {
-        inEl.textContent = 'No Record';
-        inEl.style.color = 'var(--error)';
+    if(inEl) {
+        if (timeInLog && timeInLog.action.includes('Exempted')) {
+            inEl.textContent = 'Exempted';
+            inEl.style.color = '#66fcf1';
+        } else if (timeInLog) {
+            inEl.textContent = `${timeInLog.time} (${timeInLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
+            inEl.style.color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+        } else {
+            inEl.textContent = 'No Record';
+            inEl.style.color = 'var(--error)';
+        }
     }
 
     const outEl = document.getElementById('ts-time-out');
-    if (timeOutLog.action.includes('Exempted')) {
-        outEl.textContent = 'Exempted';
-        outEl.style.color = '#66fcf1';
-    } else {
-        outEl.textContent = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
-        outEl.style.color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+    if(outEl) {
+        if (timeOutLog.action.includes('Exempted')) {
+            outEl.textContent = 'Exempted';
+            outEl.style.color = '#66fcf1';
+        } else {
+            outEl.textContent = `${timeOutLog.time} (${timeOutLog.action.includes('Late') ? 'LATE' : 'ON TIME'})`;
+            outEl.style.color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+        }
     }
     
     const details = timeOutLog.details || {};
-    document.getElementById('ts-gc').textContent = details.gcHandle || 'Not Provided';
-    document.getElementById('ts-announce').textContent = details.announcement || 'Not Provided';
-    document.getElementById('ts-posted').textContent = details.whoPosted || 'Not Provided';
+    const tsGc = document.getElementById('ts-gc');
+    const tsAnnounce = document.getElementById('ts-announce');
+    const tsPosted = document.getElementById('ts-posted');
     
-    document.getElementById('today-shift-modal').style.display = 'flex';
+    if(tsGc) tsGc.textContent = details.gcHandle || 'Not Provided';
+    if(tsAnnounce) tsAnnounce.textContent = details.announcement || 'Not Provided';
+    if(tsPosted) tsPosted.textContent = details.whoPosted || 'Not Provided';
+    
+    const modal = document.getElementById('today-shift-modal');
+    if(modal) modal.style.display = 'flex';
 }
 
 function closeTodayShiftModal() {
-    document.getElementById('today-shift-modal').style.display = 'none';
+    const modal = document.getElementById('today-shift-modal');
+    if(modal) modal.style.display = 'none';
 }
 
 let isCaptchaSolved = false;
@@ -2292,18 +2387,24 @@ function initSliderCaptcha() {
     const pieceCtx = pieceCanvas.getContext('2d');
 
     isCaptchaSolved = false;
-    errorMsg.style.display = 'none';
-    thumb.style.transition = 'none';
-    fill.style.transition = 'none';
-    pieceCanvas.style.transition = 'none';
-    thumb.style.transform = `translateX(0px)`;
-    fill.style.width = `0px`;
-    pieceCanvas.style.transform = `translateX(0px)`;
-    thumb.innerHTML = '➔';
-    thumb.style.backgroundColor = '#1e2128';
-    thumb.style.color = 'var(--accent)';
-    fill.style.backgroundColor = 'rgba(var(--accent-rgb), 0.2)';
-    trackText.style.display = 'block';
+    if(errorMsg) errorMsg.style.display = 'none';
+    if(thumb) {
+        thumb.style.transition = 'none';
+        thumb.style.transform = `translateX(0px)`;
+        thumb.innerHTML = '➔';
+        thumb.style.backgroundColor = '#1e2128';
+        thumb.style.color = 'var(--accent)';
+    }
+    if(fill) {
+        fill.style.transition = 'none';
+        fill.style.width = `0px`;
+        fill.style.backgroundColor = 'rgba(var(--accent-rgb), 0.2)';
+    }
+    if(pieceCanvas) {
+        pieceCanvas.style.transition = 'none';
+        pieceCanvas.style.transform = `translateX(0px)`;
+    }
+    if(trackText) trackText.style.display = 'block';
 
     const width = wrapper.clientWidth || 340; 
     const height = 120; 
@@ -2319,7 +2420,7 @@ function initSliderCaptcha() {
     bgCtx.fillStyle = '#9ca3af';
     bgCtx.font = '14px Arial';
     bgCtx.fillText('Loading puzzle...', width/2 - 45, height/2);
-    pieceCtx.clearRect(0,0, pieceCanvas.width, pieceCanvas.height);
+    if(pieceCtx) pieceCtx.clearRect(0,0, pieceCanvas.width, pieceCanvas.height);
 
     const img = new Image();
     img.crossOrigin = "Anonymous";
@@ -2404,10 +2505,10 @@ function onDragStart(e) {
 
     isDragging = true;
     startX = e.clientX || e.touches[0].clientX;
-    thumb.style.transition = 'none';
-    fill.style.transition = 'none';
-    pieceCanvas.style.transition = 'none';
-    trackText.style.display = 'none';
+    if(thumb) thumb.style.transition = 'none';
+    if(fill) fill.style.transition = 'none';
+    if(pieceCanvas) pieceCanvas.style.transition = 'none';
+    if(trackText) trackText.style.display = 'none';
 }
 
 function onDragMove(e) {
@@ -2419,6 +2520,8 @@ function onDragMove(e) {
     const fill = document.getElementById('studentSliderFill');
     const pieceCanvas = document.getElementById('studentCaptchaPiece');
 
+    if(!wrapper) return;
+
     let currentX = e.clientX || e.touches[0].clientX;
     let moveX = currentX - startX;
     const maxMove = wrapper.clientWidth - 42;
@@ -2426,9 +2529,9 @@ function onDragMove(e) {
     if (moveX < 0) moveX = 0;
     if (moveX > maxMove) moveX = maxMove;
 
-    thumb.style.transform = `translateX(${moveX}px)`;
-    fill.style.width = `${moveX + 21}px`;
-    pieceCanvas.style.transform = `translateX(${moveX}px)`;
+    if(thumb) thumb.style.transform = `translateX(${moveX}px)`;
+    if(fill) fill.style.width = `${moveX + 21}px`;
+    if(pieceCanvas) pieceCanvas.style.transform = `translateX(${moveX}px)`;
 }
 
 function onDragEnd(e) {
@@ -2442,6 +2545,8 @@ function onDragEnd(e) {
     const errorMsg = document.getElementById('studentCaptchaError');
     const trackText = document.getElementById('studentSliderTrackText');
 
+    if(!wrapper) return;
+
     let currentX = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : startX);
     let moveX = currentX - startX;
     const maxMove = wrapper.clientWidth - 42;
@@ -2451,26 +2556,35 @@ function onDragEnd(e) {
 
     if (Math.abs(moveX - puzzleX) < 8) {
         isCaptchaSolved = true;
-        thumb.innerHTML = '✔';
-        thumb.style.backgroundColor = 'var(--success)';
-        thumb.style.color = '#000';
-        fill.style.backgroundColor = 'rgba(34, 197, 94, 0.3)';
-        errorMsg.style.display = 'none';
+        if(thumb) {
+            thumb.innerHTML = '✔';
+            thumb.style.backgroundColor = 'var(--success)';
+            thumb.style.color = '#000';
+            thumb.style.transform = `translateX(${puzzleX}px)`;
+        }
+        if(fill) {
+            fill.style.backgroundColor = 'rgba(34, 197, 94, 0.3)';
+            fill.style.width = `${puzzleX + 21}px`;
+        }
+        if(pieceCanvas) pieceCanvas.style.transform = `translateX(${puzzleX}px)`;
+        if(errorMsg) errorMsg.style.display = 'none';
         
-        thumb.style.transform = `translateX(${puzzleX}px)`;
-        pieceCanvas.style.transform = `translateX(${puzzleX}px)`;
-        fill.style.width = `${puzzleX + 21}px`;
     } else {
-        thumb.style.transition = 'transform 0.3s ease';
-        fill.style.transition = 'width 0.3s ease';
-        pieceCanvas.style.transition = 'transform 0.3s ease';
+        if(thumb) {
+            thumb.style.transition = 'transform 0.3s ease';
+            thumb.style.transform = `translateX(0px)`;
+        }
+        if(fill) {
+            fill.style.transition = 'width 0.3s ease';
+            fill.style.width = `0px`;
+        }
+        if(pieceCanvas) {
+            pieceCanvas.style.transition = 'transform 0.3s ease';
+            pieceCanvas.style.transform = `translateX(0px)`;
+        }
         
-        thumb.style.transform = `translateX(0px)`;
-        fill.style.width = `0px`;
-        pieceCanvas.style.transform = `translateX(0px)`;
-        
-        errorMsg.style.display = 'block';
-        trackText.style.display = 'block';
+        if(errorMsg) errorMsg.style.display = 'block';
+        if(trackText) trackText.style.display = 'block';
         setTimeout(initSliderCaptcha, 500);
     }
 }
@@ -2562,11 +2676,15 @@ function checkDeviceLock() {
 }
 
 function resetDeviceLockUI(idInput, btnIn, lockMsg) {
-    idInput.value = '';
-    idInput.disabled = false;
-    btnIn.style.display = 'inline-block';
-    lockMsg.style.display = 'none';
-    lockMsg.textContent = '';
+    if(idInput) {
+        idInput.value = '';
+        idInput.disabled = false;
+    }
+    if(btnIn) btnIn.style.display = 'inline-block';
+    if(lockMsg) {
+        lockMsg.style.display = 'none';
+        lockMsg.textContent = '';
+    }
 }
 
 async function isIncognito() {
@@ -2600,58 +2718,5 @@ function factoryReset() {
         } else if (verificationText !== null) {
             alert("Factory Reset canceled. The text did not match exactly.");
         }
-    }
-}
-
-async function exemptAllForDate(dateStr) {
-    const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Excepted.\n\nTo confirm, type exactly:\nExcepted Everyone`);
-    
-    if (verificationText === "Excepted Everyone") {
-        await pullFromCloud();
-        let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-
-        const dayLogs = logs.filter(l => l.date === dateStr);
-        const studentIds = [...new Set(dayLogs.map(l => l.id))];
-
-        studentIds.forEach(idNum => {
-            const s = students.find(x => x.id === idNum);
-            if (!s) return;
-
-            const existingInLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
-            const existingOutLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
-
-            logs = logs.filter(l => !(l.id === idNum && l.date === dateStr));
-
-            logs.push({
-                name: s.name,
-                id: s.id,
-                action: 'Time In (Exempted)',
-                time: 'Exempted',
-                date: dateStr,
-                details: null,
-                originalLog: existingInLog || null
-            });
-
-            logs.push({
-                name: s.name,
-                id: s.id,
-                action: 'Time Out (Exempted)',
-                time: 'Exempted',
-                date: dateStr,
-                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
-                originalLog: existingOutLog || null
-            });
-        });
-
-        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        await pushLogsToCloud();
-        
-        renderHistoryTable(dateStr);
-        renderMainDashboard();
-        alert(`Successfully marked everyone as excepted for ${dateStr}!`);
-        
-    } else if (verificationText !== null) {
-        alert("Action canceled. The confirmation text did not match exactly.");
     }
 }

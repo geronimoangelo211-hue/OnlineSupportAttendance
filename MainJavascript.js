@@ -119,7 +119,6 @@ function checkSystemLockStatus() {
     });
 }
 
-// --- SHIFT LOGIC (4:01 AM ROLLOVER) ---
 function getShiftDateDetails() {
     const pht = getPHT();
     const hour = pht.getHours();
@@ -127,7 +126,6 @@ function getShiftDateDetails() {
     
     let shiftDate = new Date(pht);
     // Shift stays on "Yesterday" from 12:00 AM exactly up to 4:00 AM exactly.
-    // At 4:01 AM (hour === 4 && min >= 1), it becomes the NEW shift day.
     if (hour < 4 || (hour === 4 && min === 0)) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
@@ -241,12 +239,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- UPDATED BACKGROUND LOOP ---
 setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
-    // Only process auto-attendance if the system is NOT locked
+    // Process previous days' rollover data strictly at 4:01 AM or later.
     if(!isSystemLocked()) {
         processPastShifts(); 
     }
@@ -260,6 +257,81 @@ setInterval(async () => {
         renderDutyToday();
     }
 }, 15000);
+
+// --- UNIFIED SHIFT ROLLOVER & AUTO-LOGGING SYSTEM ---
+function processPastShifts() {
+    if(isSystemLocked()) return false;
+
+    const pht = getPHT();
+    const hour = pht.getHours();
+    const min = pht.getMinutes();
+    
+    let currentShiftDate = new Date(pht);
+    // Determine what day the CURRENT active shift belongs to.
+    if (hour < 4 || (hour === 4 && min === 0)) {
+        currentShiftDate.setDate(currentShiftDate.getDate() - 1); 
+    }
+    // Normalize to midnight to establish the exact shift date
+    currentShiftDate.setHours(0,0,0,0);
+    
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    let updated = false;
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // We check the 3 days prior to the CURRENT active shift to seal any old gaps.
+    for (let i = 1; i <= 3; i++) {
+        let checkDate = new Date(currentShiftDate);
+        checkDate.setDate(checkDate.getDate() - i);
+        let checkDateStr = checkDate.toLocaleDateString('en-US');
+        let checkDayStr = dayNames[checkDate.getDay()];
+
+        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
+        
+        scheduledStudents.forEach(student => {
+            const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
+            const hasTimeIn = sLogs.some(l => l.action.includes('In'));
+            const hasTimeOut = sLogs.some(l => l.action.includes('Out') || l.action.includes('Exempted'));
+            const hasNoAtt = sLogs.some(l => l.action === 'No Attendance');
+
+            // 1. Shift entirely missed
+            if (sLogs.length === 0) {
+                logs.push({
+                    name: student.name,
+                    id: student.id,
+                    action: 'No Attendance',
+                    time: '4:01 AM',
+                    date: checkDateStr,
+                    details: null
+                });
+                updated = true;
+            } 
+            // 2. Timed in, but forgot to time out completely before the 4:00 AM cutoff
+            else if (hasTimeIn && !hasTimeOut && !hasNoAtt) {
+                logs.push({
+                    name: student.name,
+                    id: student.id,
+                    action: 'Time Out (Exempted)', // Auto-Exempted per request
+                    time: '4:00 AM', // Triggered exactly at 4:00 AM limit
+                    date: checkDateStr,
+                    details: {
+                        gcHandle: 'Auto-Logged by System',
+                        announcement: 'No',
+                        whoPosted: 'System Auto-Log'
+                    }
+                });
+                updated = true;
+            }
+        });
+    }
+
+    if (updated) {
+        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+        pushLogsToCloud(); 
+        enforceHistoryLimit(); 
+    }
+    return updated;
+}
 
 async function loginAdmin(event) {
     if (event) event.preventDefault();
@@ -1078,7 +1150,7 @@ async function handleTimeOut() {
         } 
 
         pendingTimeOutStudent = student;
-        // Shift hour 0-4 evaluates as Late. (Because hour < 4 or hour 4 min 0 triggers previous day logic)
+        // Shift hour 0-3 and exactly 4:00 AM evaluates as Late for the previous day. 
         pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
         pendingTimeOutDate = shift.dateStr; 
         
@@ -1159,80 +1231,6 @@ async function finalizeTimeOut() {
             submitBtn.style.opacity = "1";
         }
     }
-}
-
-// --- UPDATED: 4:01 AM Shift Rollover processing for BOTH Auto-No-Attendance and Auto-Exemptions ---
-function processPastShifts() {
-    if(isSystemLocked()) return false;
-
-    const shift = getShiftDateDetails();
-    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    let updated = false;
-
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-    // We use the literal real-time clock to determine previous days safely.
-    const pht = getPHT();
-    let currentRealDate = new Date(pht);
-    // If it's before 4:01 AM, we are still technically in "yesterday's" shift.
-    // So "past shifts" mean anything older than yesterday.
-    if (currentRealDate.getHours() < 4 || (currentRealDate.getHours() === 4 && currentRealDate.getMinutes() === 0)) {
-        currentRealDate.setDate(currentRealDate.getDate() - 1);
-    }
-    
-    // Check the last 3 days to catch anything that slipped through
-    for (let i = 1; i <= 3; i++) {
-        let d = new Date(currentRealDate);
-        d.setDate(d.getDate() - i);
-        let pastDateStr = d.toLocaleDateString('en-US');
-        let pastDayStr = dayNames[d.getDay()];
-
-        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(pastDayStr));
-        
-        scheduledStudents.forEach(student => {
-            const sLogs = logs.filter(l => l.id === student.id && l.date === pastDateStr);
-            const hasTimeIn = sLogs.some(l => l.action.includes('In'));
-            const hasTimeOut = sLogs.some(l => l.action.includes('Out') || l.action.includes('Exempted'));
-            const hasNoAtt = sLogs.some(l => l.action === 'No Attendance');
-
-            // Missing Time In completely -> No Attendance at 4:01 AM
-            if (sLogs.length === 0) {
-                logs.push({
-                    name: student.name,
-                    id: student.id,
-                    action: 'No Attendance',
-                    time: '4:01 AM',
-                    date: pastDateStr,
-                    details: null
-                });
-                updated = true;
-            } 
-            // Has Time In but no Time Out -> Auto-Exempt stamped at 11:59 PM
-            else if (hasTimeIn && !hasTimeOut && !hasNoAtt) {
-                logs.push({
-                    name: student.name,
-                    id: student.id,
-                    action: 'Time Out (Exempted)',
-                    time: '11:59 PM',
-                    date: pastDateStr,
-                    details: {
-                        gcHandle: 'System Auto-Exempt',
-                        announcement: 'No',
-                        whoPosted: 'System'
-                    }
-                });
-                updated = true;
-            }
-        });
-    }
-
-    if (updated) {
-        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        pushLogsToCloud(); 
-        enforceHistoryLimit(); 
-    }
-    return updated;
 }
 
 function enforceHistoryLimit() {

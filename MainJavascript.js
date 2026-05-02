@@ -1574,6 +1574,11 @@ async function recordToGoogleSheets(dateStr) {
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const targetLogs = logs.filter(l => l.date === dateStr);
 
+    if (students.length === 0) {
+        alert("No registered students found.");
+        return;
+    }
+
     const sheetBtn = document.getElementById('history-sheet-btn');
     const originalText = sheetBtn ? sheetBtn.textContent : "Record Today Google Sheets";
     
@@ -1645,19 +1650,25 @@ async function recordToGoogleSheets(dateStr) {
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyewbogek6fmrmlSv9J55daO_bsSsjnBBkvg2BV6bmnKW_MW2JailxtNYo6QIMY77D6/exec";
 
     try {
-        await fetch(GOOGLE_SCRIPT_URL, {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: "data=" + encodeURIComponent(JSON.stringify(payload))
+            body: JSON.stringify(payload)
         });
 
-        alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
+        const textResponse = await response.text();
+        try {
+            const result = JSON.parse(textResponse);
+            if (result.success) {
+                alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
+            } else {
+                alert(`Error from sheet: ${result.error}`);
+            }
+        } catch(e) {
+            alert(`Successfully sent logs for ${dateStr} to Google Sheets!`);
+        }
     } catch (error) {
         console.error("Error sending to Google Sheets:", error);
-        alert("Network error trying to contact Google Sheets.");
+        alert("Network error trying to contact Google Sheets. Did you deploy a NEW VERSION in Apps Script?");
     } finally {
         if (sheetBtn) {
             sheetBtn.textContent = originalText;

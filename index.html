@@ -30,9 +30,9 @@
             margin: 0;
         }
         
-        /* Adjusted heights for dashboard panels to prevent scrolling */
+        /* Fixed heights for dashboard bottom panels to align them perfectly */
         .dash-panel-bottom-row {
-            min-height: 250px; 
+            height: 250px; 
             display: flex;
             flex-direction: column;
         }
@@ -201,7 +201,7 @@
                                 </div>
                             </div>
                             
-                            <!-- UPDATED: Best Performance Panel (Single Name, ID, Rate - Reduced Height) -->
+                            <!-- UPDATED: Best Performance Panel (Fixed Size, NO Scrollbar) -->
                             <div class="panel dash-panel-bottom-row">
                                 <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 15px;">
                                     <h3 style="margin: 0;">Best Performance</h3>
@@ -219,11 +219,12 @@
                             </div>
                         </div>
 
-                        <!-- UPDATED: Dead Students Alert (Fits screen, No Scroll) -->
-                        <div class="panel dash-panel-bottom-row" style="min-height: auto;">
+                        <!-- UPDATED: Dead Students Alert (Fixed Size WITH Scrollbar) -->
+                        <div class="panel dash-panel-bottom-row">
                             <h3 style="margin-top: 0;">Dead Students Alert</h3>
                             <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
-                            <div id="dash-dead-students" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 8px;"></div>
+                            <!-- ONLY THIS INNER DIV HAS THE SCROLLBAR -->
+                            <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
                         </div>
 
                     </div>

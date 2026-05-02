@@ -30,14 +30,12 @@
             margin: 0;
         }
         
-        .best-perf-content {
-            flex: 1;
+        /* Forces all dashboard panels to be the exact same size */
+        .dash-panel-standard {
+            height: 340px; 
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 0;
-            text-align: center;
+            overflow: hidden; /* Keeps UI from breaking screen boundaries */
         }
     </style>
 </head>
@@ -173,13 +171,13 @@
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 40px; align-items: stretch;">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 40px; align-items: stretch;">
                         
-                        <!-- LEFT COLUMN: Charts -->
-                        <div style="display: flex; flex-direction: column; gap: 30px;">
+                        <!-- LEFT COLUMN: Charts (3 panels, stacked 2 + 1) -->
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
                             
                             <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
-                                <div class="panel" style="min-height: 300px; padding: 25px;">
+                                <div class="panel dash-panel-standard" style="padding: 25px;">
                                     <h3 style="margin-top: 0; margin-bottom: 0; text-align: left;">Attendance Breakdown</h3>
                                     <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 15px;">
                                         <div id="dash-pie-chart" class="pie-chart"></div>
@@ -190,17 +188,17 @@
                                     </div>
                                 </div>
 
-                                <div class="panel" style="min-height: 300px; padding: 25px;">
+                                <div class="panel dash-panel-standard" style="padding: 25px;">
                                     <h3 style="margin-top: 0; margin-bottom: 15px; text-align: left;">Students Attendance in a Week</h3>
-                                    <div id="dash-bar-chart" style="flex: 1; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding-top: 20px; border-bottom: 1px solid #2d313c; min-height: 150px;">
+                                    <div id="dash-bar-chart" style="flex: 1; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding-top: 20px; border-bottom: 1px solid #2d313c; min-height: 0;">
                                     </div>
                                     <div id="dash-bar-labels" style="display: flex; justify-content: space-around; margin-top: 10px; color: var(--text-muted); font-size: 11px;">
                                     </div>
                                 </div>
                             </div>
                             
-                            <!-- NEW: Line Chart -->
-                            <div class="panel" style="flex: 1; min-height: 250px; display: flex; flex-direction: column; padding: 25px;">
+                            <!-- Line Chart -->
+                            <div class="panel dash-panel-standard" style="padding: 25px;">
                                 <h3 style="margin-top: 0; text-align: left;">Attendance Trend</h3>
                                 <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Hourly Time-Ins (5:00 AM - 4:00 AM)</p>
                                 <div id="dash-line-chart-container" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative;">
@@ -209,29 +207,21 @@
 
                         </div>
 
-                        <!-- RIGHT COLUMN: Lists and Performance -->
-                        <div style="display: flex; flex-direction: column; gap: 30px; height: 100%;">
+                        <!-- RIGHT COLUMN: Lists (2 panels stacked) -->
+                        <div style="display: flex; flex-direction: column; gap: 20px; height: 100%;">
                             
-                            <!-- Dead Students Alert (Scrollable, takes up remaining space) -->
-                            <div class="panel" style="flex: 1; display: flex; flex-direction: column; min-height: 300px;">
+                            <!-- Dead Students Alert -->
+                            <div class="panel dash-panel-standard">
                                 <h3 style="margin-top: 0;">Dead Students Alert</h3>
                                 <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Students with ZERO logs in 21 days.</p>
                                 <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
                             </div>
                             
-                            <!-- Best Performance Panel (Single Name layout) -->
-                            <div class="panel" style="flex-shrink: 0; display: flex; flex-direction: column;">
-                                <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 5px; text-align: left;">
-                                    <h3 style="margin: 0;">Best Performance</h3>
-                                    <p class="placeholder-text" style="margin-top: 5px; margin-bottom: 0;">Highest overall accuracy rate.</p>
-                                </div>
-                                <div class="best-perf-content" id="dash-best-perf-container">
-                                    <div id="dash-best-perf-name" style="font-size: 1.6rem; color: var(--text-main); font-weight: bold;">TBD</div>
-                                    <div id="dash-best-perf-id" style="font-size: 1rem; color: var(--text-muted); margin-top: 5px;">ID: --</div>
-                                    <div id="dash-best-perf-rate" style="font-size: 3rem; color: var(--accent); font-weight: bold; margin-top: 15px; text-shadow: 0 0 15px rgba(var(--accent-rgb), 0.4);">
-                                        0%
-                                    </div>
-                                </div>
+                            <!-- Top 10 Best Performance -->
+                            <div class="panel dash-panel-standard">
+                                <h3 style="margin-top: 0;">Top 10 Best Performance</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px;">Highest overall accuracy rate.</p>
+                                <div id="dash-best-perf" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;"></div>
                             </div>
 
                         </div>

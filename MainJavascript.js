@@ -244,6 +244,7 @@ setInterval(async () => {
     await pullFromCloud(); 
     checkSystemLockStatus();
     
+    // Process previous days' rollover data strictly at 4:01 AM or later.
     if(!isSystemLocked()) {
         processPastShifts(); 
     }
@@ -2257,7 +2258,6 @@ function renderMainDashboard() {
             });
         }
 
-        // --- NEW LINE CHART: Hourly Time Ins ---
         const timeInLogs = logs.filter(l => l.date === todayStr && l.action.includes('In') && !l.action.includes('Exempted'));
         const hourlyCounts = new Array(24).fill(0);
         
@@ -2346,8 +2346,8 @@ function renderMainDashboard() {
             }
         }
 
-        let bestStudentObj = null;
-        let bestScore = -1;
+        // --- UPDATED: Top 10 Best Performance Array Logic ---
+        let perfList = [];
 
         students.forEach(student => {
             const studentLogs = logs.filter(l => l.id === student.id);
@@ -2379,25 +2379,38 @@ function renderMainDashboard() {
             perfRate += bonus;
             if (perfRate > 100) perfRate = 100;
 
-            if (perfRate > bestScore) {
-                bestScore = perfRate;
-                bestStudentObj = { name: student.name, id: student.id, rate: Math.round(perfRate) };
-            }
+            perfList.push({ name: student.name, id: student.id, rate: Math.round(perfRate) });
         });
 
-        const bestPerfNameEl = document.getElementById('dash-best-perf-name');
-        const bestPerfIdEl = document.getElementById('dash-best-perf-id');
-        const bestPerfRateEl = document.getElementById('dash-best-perf-rate');
+        perfList.sort((a, b) => b.rate - a.rate);
+        const top10 = perfList.slice(0, 10);
 
-        if (bestPerfNameEl && bestPerfIdEl && bestPerfRateEl) {
-            if (bestStudentObj) {
-                bestPerfNameEl.textContent = bestStudentObj.name;
-                bestPerfIdEl.textContent = `ID: ${bestStudentObj.id}`;
-                bestPerfRateEl.textContent = `${bestStudentObj.rate}%`;
+        const bestPerfEl = document.getElementById('dash-best-perf');
+        if (bestPerfEl) {
+            bestPerfEl.innerHTML = '';
+            if (top10.length === 0) {
+                bestPerfEl.innerHTML = '<p class="placeholder-text" style="text-align: center; padding: 20px;">No data available.</p>';
             } else {
-                bestPerfNameEl.textContent = 'TBD';
-                bestPerfIdEl.textContent = 'ID: --';
-                bestPerfRateEl.textContent = '0%';
+                top10.forEach((p, index) => {
+                    let color = p.rate >= 80 ? 'var(--success)' : (p.rate >= 50 ? '#f59e0b' : 'var(--error)');
+                    let rankBadge = '';
+                    if (index === 0) rankBadge = '🥇';
+                    else if (index === 1) rankBadge = '🥈';
+                    else if (index === 2) rankBadge = '🥉';
+                    else rankBadge = `<span style="display:inline-block; width:20px; text-align:center; font-weight:bold; color:var(--text-muted); font-size:11px;">#${index+1}</span>`;
+
+                    bestPerfEl.innerHTML += `
+                        <div style="padding: 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; background: rgba(0,0,0,0.2);">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                ${rankBadge}
+                                <div style="display: flex; flex-direction: column;">
+                                    <span style="color: var(--text-main); font-size: 13px; font-weight: bold;">${p.name}</span>
+                                    <span style="color: var(--text-muted); font-size: 10px;">ID: ${p.id}</span>
+                                </div>
+                            </div>
+                            <span style="color: ${color}; font-weight: bold; font-size: 14px;">${p.rate}%</span>
+                        </div>`;
+                });
             }
         }
     } catch (e) {

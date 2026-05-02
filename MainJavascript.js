@@ -1,5 +1,5 @@
 console.log("%cSTOP!", "color: red; font-size: 50px; font-weight: bold; font-family: sans-serif; text-shadow: 2px 2px 0 #000;");
-console.log("%cThis is a browser feature intended for developers. If someone told you to copy-paste something here to hack the attendance system, it is a scam and your access will be logged.", "color: white; background: red; font-size: 16px; padding: 5px 10px; border-radius: 5px;");
+console.log("%cBawal ka dito panget", "color: white; background: red; font-size: 16px; padding: 5px 10px; border-radius: 5px;");
 
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 

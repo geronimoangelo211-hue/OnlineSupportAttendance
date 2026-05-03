@@ -31,7 +31,7 @@
             text-align: center;
         }
         
-        /* STRICT PANEL SIZING: Forces a perfect grid and stops the SVG from exploding */
+        /* STRICT PANEL SIZING: Forces a perfect grid and stops panels from escaping screen */
         .dash-panel-standard {
             height: 360px !important; 
             min-height: 360px !important;
@@ -41,6 +41,15 @@
             overflow: hidden !important;
             box-sizing: border-box !important;
             padding: 20px !important;
+        }
+        .best-perf-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 0;
+            text-align: center;
         }
     </style>
 </head>
@@ -66,7 +75,7 @@
             <p style="color: var(--text-muted); margin-top: 10px;">Please wait for the Support Head to open the system.</p>
         </div>
 
-        <!-- NEW: Fullscreen Incognito Overlay -->
+        <!-- Fullscreen Incognito Overlay -->
         <div id="incognito-screen" class="system-locked-overlay" style="display: none; position: fixed; z-index: 9999;">
             <span style="font-size: 4rem; margin-bottom: 10px;">🕵️‍♂️</span>
             <h2 class="locked-text">Incognito Mode Detected</h2>

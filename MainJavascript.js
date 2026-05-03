@@ -14,74 +14,6 @@ const isAuthenticated = function() {
     }
 };
 
-async function pullFromCloud() {
-    try {
-        const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
-        if (stuRes.ok) {
-            const cloudStudents = await stuRes.json();
-            const localStudents = JSON.parse(localStorage.getItem('students')) || [];
-
-            if (cloudStudents.length > 0) {
-                localStorage.setItem('students', JSON.stringify(cloudStudents));
-            } else if (localStudents.length > 0) {
-                await pushStudentsToCloud();
-            }
-        }
-        
-        const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
-        if (logRes.ok) {
-            const cloudLogs = await logRes.json();
-            const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-
-            if (cloudLogs.length > 0) {
-                localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
-            } else if (localLogs.length > 0) {
-                await pushLogsToCloud();
-            }
-        }
-    } catch (err) {
-        console.warn("Cloud pull delayed.");
-    }
-}
-
-async function pushStudentsToCloud() {
-    const data = JSON.parse(localStorage.getItem('students')) || [];
-    try {
-        await fetch(`${API_BASE_URL}/students/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-    } catch (err) { console.error("Cloud Student Sync Failed"); }
-}
-
-async function pushLogsToCloud() {
-    const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    try {
-        const response = await fetch(`${API_BASE_URL}/logs/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        if (response.status === 403) {
-            console.warn("Backend rejected sync: SYSTEM IS LOCKED.");
-            isBackendLocked = true;
-            localStorage.setItem('attendance_closed', 'true');
-            applyUIRestrictions();
-        }
-    } catch (err) { console.error("Cloud Log Sync Failed"); }
-}
-
-let pendingTimeOutStudent = null;
-let pendingTimeOutAction = null;
-let pendingTimeOutDate = null;
-let settingsClickCount = 0; 
-let pendingExemptId = null;
-let pendingExemptDate = null;
-let pendingExemptCheckbox = null;
-
-// --- ATTENDANCE SYSTEM LOCK LOGIC ---
 let isBackendLocked = false; 
 
 async function checkBackendLockStatus() {
@@ -165,6 +97,74 @@ function applyUIRestrictions() {
         }
     });
 }
+
+
+async function pullFromCloud() {
+    try {
+        const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
+        if (stuRes.ok) {
+            const cloudStudents = await stuRes.json();
+            const localStudents = JSON.parse(localStorage.getItem('students')) || [];
+
+            if (cloudStudents.length > 0) {
+                localStorage.setItem('students', JSON.stringify(cloudStudents));
+            } else if (localStudents.length > 0) {
+                await pushStudentsToCloud();
+            }
+        }
+        
+        const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
+        if (logRes.ok) {
+            const cloudLogs = await logRes.json();
+            const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+
+            if (cloudLogs.length > 0) {
+                localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
+            } else if (localLogs.length > 0) {
+                await pushLogsToCloud();
+            }
+        }
+    } catch (err) {
+        console.warn("Cloud pull delayed.");
+    }
+}
+
+async function pushStudentsToCloud() {
+    const data = JSON.parse(localStorage.getItem('students')) || [];
+    try {
+        await fetch(`${API_BASE_URL}/students/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+    } catch (err) { console.error("Cloud Student Sync Failed"); }
+}
+
+async function pushLogsToCloud() {
+    const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    try {
+        const response = await fetch(`${API_BASE_URL}/logs/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.status === 403) {
+            console.warn("Backend rejected sync: SYSTEM IS LOCKED.");
+            isBackendLocked = true;
+            localStorage.setItem('attendance_closed', 'true');
+            applyUIRestrictions();
+        }
+    } catch (err) { console.error("Cloud Log Sync Failed"); }
+}
+
+let pendingTimeOutStudent = null;
+let pendingTimeOutAction = null;
+let pendingTimeOutDate = null;
+let settingsClickCount = 0; 
+let pendingExemptId = null;
+let pendingExemptDate = null;
+let pendingExemptCheckbox = null;
 
 function getShiftDateDetails() {
     const pht = getPHT();
@@ -328,6 +328,7 @@ function processPastShifts() {
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || []; 
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -340,7 +341,7 @@ function processPastShifts() {
 
         if (deletedDates.includes(checkDateStr)) continue;
 
-        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr) && s.id !== 'SYS_CONFIG_X99');
+        const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
         
         scheduledStudents.forEach(student => {
             const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
@@ -893,8 +894,10 @@ function deleteHistoryDate(dateStr, event) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         
+        // Remove normal logs for this date
         logs = logs.filter(l => l.date !== dateStr);
         
+        // Push the Tombstone log to cloud to stop ghosts
         logs.push({
             name: 'SYSTEM_DELETED',
             id: 'SYS_DELETED_DATE',
@@ -1271,6 +1274,7 @@ async function handleTimeOut() {
         } 
 
         pendingTimeOutStudent = student;
+        // Shift hour 0-3 and exactly 4:00 AM evaluates as Late for the previous day. 
         pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
         pendingTimeOutDate = shift.dateStr; 
         
@@ -1710,43 +1714,52 @@ function exportToExcel(dateStr = null) {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
         const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
 
-        let inText = isScheduled ? 'Absent' : 'No Duty Today';
-        let outText = isScheduled ? 'Absent' : 'No Duty Today';
+        let inText = '-';
+        let outText = '-';
         let gc = '-';
         let ann = '-';
         let post = '-';
 
-        const timeInLog = studentLogs.find(l => l.action.includes('In'));
-        const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
-        const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
-
-        if (exemptLog) {
-            inText = 'Exempted';
-            outText = 'Exempted';
-        } else if (noAttLog) {
-            inText = 'Absent';
-            outText = 'Absent';
+        if (studentLogs.length === 0) {
+            inText = 'No Duty Today';
+            outText = 'No Duty Today';
         } else {
-            if (timeInLog) {
-                if (timeInLog.action.includes('Exempted')) {
-                    inText = 'Exempted';
-                } else {
-                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
-                    inText = `${timeInLog.time} - ${status}`;
-                }
-            }
+            const timeInLog = studentLogs.find(l => l.action.includes('In'));
+            const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+            const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+            const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
-            if (timeOutLog) {
-                if (timeOutLog.action.includes('Exempted')) {
-                    outText = 'Exempted';
+            if (exemptLog) {
+                inText = 'Exempted';
+                outText = 'Exempted';
+            } else if (noAttLog) {
+                inText = 'Absent';
+                outText = 'Absent';
+            } else {
+                if (timeInLog) {
+                    if (timeInLog.action.includes('Exempted')) {
+                        inText = 'Exempted';
+                    } else {
+                        const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                        inText = `${timeInLog.time} - ${status}`;
+                    }
                 } else {
-                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
-                    outText = `${timeOutLog.time} - ${status}`;
-                    const details = timeOutLog.details || {};
-                    gc = details.gcHandle || '-';
-                    ann = details.announcement || '-';
-                    post = details.whoPosted || '-';
+                    inText = 'Absent';
+                }
+
+                if (timeOutLog) {
+                    if (timeOutLog.action.includes('Exempted')) {
+                        outText = 'Exempted';
+                    } else {
+                        const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                        outText = `${timeOutLog.time} - ${status}`;
+                        const details = timeOutLog.details || {};
+                        gc = details.gcHandle || '-';
+                        ann = details.announcement || '-';
+                        post = details.whoPosted || '-';
+                    }
+                } else {
+                    outText = 'Absent';
                 }
             }
         }
@@ -1808,45 +1821,53 @@ async function recordToGoogleSheets(dateStr) {
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
-        const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
 
-        let inText = isScheduled ? 'Absent' : 'No Duty Today';
-        let outText = isScheduled ? 'Absent' : 'No Duty Today';
+        let inText = '-';
+        let outText = '-';
         let gc = '-';
         let ann = '-';
         let post = '-';
 
-        const timeInLog = studentLogs.find(l => l.action.includes('In'));
-        const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
-        const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-        const exemptLog = studentLogs.find(l => l.action === 'Exempted');
-
-        if (exemptLog) {
-            inText = 'Exempted';
-            outText = 'Exempted';
-        } else if (noAttLog) {
-            inText = 'Absent';
-            outText = 'Absent';
+        if (studentLogs.length === 0) {
+            inText = 'No Duty Today';
+            outText = 'No Duty Today';
         } else {
-            if (timeInLog) {
-                if (timeInLog.action.includes('Exempted')) {
-                    inText = 'Exempted';
-                } else {
-                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
-                    inText = `${timeInLog.time} - ${status}`;
-                }
-            }
+            const timeInLog = studentLogs.find(l => l.action.includes('In'));
+            const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+            const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+            const exemptLog = studentLogs.find(l => l.action === 'Exempted');
 
-            if (timeOutLog) {
-                if (timeOutLog.action.includes('Exempted')) {
-                    outText = 'Exempted';
+            if (exemptLog) {
+                inText = 'Exempted';
+                outText = 'Exempted';
+            } else if (noAttLog) {
+                inText = 'Absent';
+                outText = 'Absent';
+            } else {
+                if (timeInLog) {
+                    if (timeInLog.action.includes('Exempted')) {
+                        inText = 'Exempted';
+                    } else {
+                        const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                        inText = `${timeInLog.time} - ${status}`;
+                    }
                 } else {
-                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
-                    outText = `${timeOutLog.time} - ${status}`;
-                    const details = timeOutLog.details || {};
-                    gc = details.gcHandle || '-';
-                    ann = details.announcement || '-';
-                    post = details.whoPosted || '-';
+                    inText = 'Absent';
+                }
+
+                if (timeOutLog) {
+                    if (timeOutLog.action.includes('Exempted')) {
+                        outText = 'Exempted';
+                    } else {
+                        const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                        outText = `${timeOutLog.time} - ${status}`;
+                        const details = timeOutLog.details || {};
+                        gc = details.gcHandle || '-';
+                        ann = details.announcement || '-';
+                        post = details.whoPosted || '-';
+                    }
+                } else {
+                    outText = 'Absent';
                 }
             }
         }
@@ -1878,12 +1899,12 @@ async function recordToGoogleSheets(dateStr) {
         try {
             const result = JSON.parse(textResponse);
             if (result.success) {
-                alert(`Successfully erased old data and saved fresh logs for ${dateStr} to Google Sheets!`);
+                alert(`Successfully saved fresh logs for ${dateStr} to Google Sheets!`);
             } else {
                 alert(`Error from sheet: ${result.error}`);
             }
         } catch(e) {
-            alert(`Successfully erased old data and saved fresh logs for ${dateStr} to Google Sheets!`);
+            alert(`Successfully saved fresh logs for ${dateStr} to Google Sheets!`);
         }
     } catch (error) {
         console.error("Error sending to Google Sheets:", error);

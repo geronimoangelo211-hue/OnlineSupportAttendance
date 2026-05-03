@@ -3,6 +3,9 @@ console.log("%cBawal ka dito panget", "color: white; background: red; font-size:
 
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 
+// NEW SCRIPT URL FOR GOOGLE SHEETS
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
+
 const isAuthenticated = function() {
     const tk = sessionStorage.getItem('_auth_tkn_x92');
     if(!tk) return false;
@@ -1042,7 +1045,6 @@ async function removeExemptions(idNum, dateStr) {
 async function exemptAllForDate(dateStr) {
     if(!isAuthenticated()) return;
     
-    // TEXT UPDATED TO EXEMPT EVERYONE
     const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Exempted.\n\nTo confirm, type exactly:\nExempt Everyone`);
     
     if (verificationText === "Exempt Everyone") {
@@ -1089,7 +1091,6 @@ async function exemptAllForDate(dateStr) {
         renderHistoryTable(dateStr);
         renderMainDashboard();
         
-        // TEXT UPDATED TO EXEMPTED
         alert(`Successfully marked everyone as exempted for ${dateStr}!`);
         
     } else if (verificationText !== null) {
@@ -1619,7 +1620,10 @@ function renderLogs() {
     const tbody = document.getElementById('attendance-logs-body');
     
     const searchInput = document.getElementById('search-attendance-global');
+    const sortSelect = document.getElementById('sort-attendance-global');
+    
     const query = searchInput ? searchInput.value.toLowerCase() : '';
+    const sortVal = sortSelect ? sortSelect.value : 'NAME_ASC';
 
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -1627,16 +1631,46 @@ function renderLogs() {
     const shift = getShiftDateDetails();
     const todayStr = shift.dateStr;
     const currentDay = shift.dayStr;
-    const logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
+    
+    let logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
 
-    logsWithIndex.reverse().filter(log => {
+    let filteredLogs = logsWithIndex.filter(log => {
         const student = validStudents.find(s => s.id === log.id);
         const isScheduledToday = student && student.assignedDays && student.assignedDays.includes(currentDay);
         
         return log.date === todayStr &&
                isScheduledToday &&
                (log.name.toLowerCase().includes(query) || log.id.toLowerCase().includes(query));
-    }).forEach(log => {
+    });
+
+    filteredLogs.sort((a, b) => {
+        const stuA = validStudents.find(s => s.id === a.id) || {};
+        const stuB = validStudents.find(s => s.id === b.id) || {};
+        
+        const nameA = (a.name || '').toLowerCase().trim();
+        const nameB = (b.name || '').toLowerCase().trim();
+        const idA = (a.id || '').toString().trim();
+        const idB = (b.id || '').toString().trim();
+        const classA = (stuA.classLevel || 'zzzz').toLowerCase().trim();
+        const classB = (stuB.classLevel || 'zzzz').toLowerCase().trim();
+
+        if (sortVal === 'NAME_ASC') return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        if (sortVal === 'NAME_DESC') return nameA > nameB ? -1 : (nameA < nameB ? 1 : 0);
+        if (sortVal === 'ID_ASC') return idA.localeCompare(idB, undefined, {numeric: true});
+        if (sortVal === 'CLASS_FRESH') {
+            if (classA === 'freshmen' && classB !== 'freshmen') return -1;
+            if (classA !== 'freshmen' && classB === 'freshmen') return 1;
+            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        }
+        if (sortVal === 'CLASS_UPPER') {
+            if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
+            if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
+            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        }
+        return b.originalIndex - a.originalIndex; // fallback to original timeline
+    });
+
+    filteredLogs.forEach(log => {
         const tr = document.createElement('tr');
         
         let statusColor = 'var(--text-main)';
@@ -1734,18 +1768,19 @@ function exportToExcel(dateStr = null) {
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
-        const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
+        
+        let isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
+        if (studentLogs.some(l => l.action.includes('In') || l.action.includes('Out') || l.action === 'No Attendance')) {
+            isScheduled = true;
+        }
 
-        let inText = '-';
-        let outText = '-';
+        let inText = isScheduled ? 'Absent' : 'No Duty Today';
+        let outText = isScheduled ? 'Absent' : 'No Duty Today';
         let gc = '-';
         let ann = '-';
         let post = '-';
 
-        if (studentLogs.length === 0) {
-            inText = 'No Duty Today';
-            outText = 'No Duty Today';
-        } else {
+        if (studentLogs.length > 0) {
             const timeInLog = studentLogs.find(l => l.action.includes('In'));
             const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
             const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
@@ -1843,17 +1878,20 @@ async function recordToGoogleSheets(dateStr) {
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
+        
+        // Ensure that even if a student wasn't scheduled, but manually logged in anyway, they get tracked as present/absent
+        let isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
+        if (studentLogs.some(l => l.action.includes('In') || l.action.includes('Out') || l.action === 'No Attendance')) {
+            isScheduled = true;
+        }
 
-        let inText = '-';
-        let outText = '-';
+        let inText = isScheduled ? 'Absent' : 'No Duty Today';
+        let outText = isScheduled ? 'Absent' : 'No Duty Today';
         let gc = '-';
         let ann = '-';
         let post = '-';
 
-        if (studentLogs.length === 0) {
-            inText = 'No Duty Today';
-            outText = 'No Duty Today';
-        } else {
+        if (studentLogs.length > 0) {
             const timeInLog = studentLogs.find(l => l.action.includes('In'));
             const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
             const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
@@ -1905,8 +1943,6 @@ async function recordToGoogleSheets(dateStr) {
             postedBy: post
         });
     });
-
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
     try {
         const response = await fetch(GOOGLE_SCRIPT_URL, {
@@ -2062,6 +2098,8 @@ function renderSchedule() {
         const nameB = (b.name || '').toLowerCase().trim();
         const idA = (a.id || '').toString().trim();
         const idB = (b.id || '').toString().trim();
+        const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
+        const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
         const tagA = (a.gcHandle || 'zzzz').toLowerCase().trim(); 
         const tagB = (b.gcHandle || 'zzzz').toLowerCase().trim();
 
@@ -2072,6 +2110,16 @@ function renderSchedule() {
         if (sortVal === 'TAG_ASC') {
             if (tagA === tagB) return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0); 
             return tagA < tagB ? -1 : 1;
+        }
+        if (sortVal === 'CLASS_FRESH') {
+            if (classA === 'freshmen' && classB !== 'freshmen') return -1;
+            if (classA !== 'freshmen' && classB === 'freshmen') return 1;
+            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        }
+        if (sortVal === 'CLASS_UPPER') {
+            if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
+            if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
+            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
         }
         return 0; 
     });
@@ -2582,7 +2630,10 @@ function renderDashboardSummary() {
     const tbody = document.getElementById('summary-body');
     
     const searchInput = document.getElementById('search-attendance-global');
+    const sortSelect = document.getElementById('sort-attendance-global');
+    
     const query = searchInput ? searchInput.value.toLowerCase() : '';
+    const sortVal = sortSelect ? sortSelect.value : 'NAME_ASC';
     
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -2593,10 +2644,34 @@ function renderDashboardSummary() {
 
     const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
 
-    const filteredStudents = scheduledToday.filter(student => 
+    let filteredStudents = scheduledToday.filter(student => 
         student.name.toLowerCase().includes(query) || 
         student.id.toLowerCase().includes(query)
     );
+
+    filteredStudents.sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase().trim();
+        const nameB = (b.name || '').toLowerCase().trim();
+        const idA = (a.id || '').toString().trim();
+        const idB = (b.id || '').toString().trim();
+        const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
+        const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
+
+        if (sortVal === 'NAME_ASC') return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        if (sortVal === 'NAME_DESC') return nameA > nameB ? -1 : (nameA < nameB ? 1 : 0);
+        if (sortVal === 'ID_ASC') return idA.localeCompare(idB, undefined, {numeric: true});
+        if (sortVal === 'CLASS_FRESH') {
+            if (classA === 'freshmen' && classB !== 'freshmen') return -1;
+            if (classA !== 'freshmen' && classB === 'freshmen') return 1;
+            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        }
+        if (sortVal === 'CLASS_UPPER') {
+            if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
+            if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
+            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        }
+        return 0; 
+    });
 
     filteredStudents.forEach(student => {
         const hasTimedOutToday = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
@@ -2614,10 +2689,13 @@ function renderDashboardSummary() {
             rowBg = 'rgba(245, 158, 11, 0.15)'; 
         }
 
+        let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
+
         const tr = document.createElement('tr');
         tr.style.backgroundColor = rowBg;
         tr.innerHTML = `
             <td><strong style="color: var(--text-main);">${student.name}</strong></td>
+            <td>${classTagHtml}</td>
             <td style="color: var(--text-muted);">${student.id}</td>
             <td>
                 <div class="button-cell-wrap">

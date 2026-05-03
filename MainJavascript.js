@@ -50,7 +50,7 @@ async function toggleAttendanceState(elem) {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY
+                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
             },
             body: JSON.stringify({ isLocked: isClosed })
         });
@@ -106,9 +106,56 @@ function applyUIRestrictions() {
 }
 
 // ==========================================
-// SAFELY PULL FROM CLOUD (EVERYONE CAN DO THIS)
+// ANTI-GHOST POPUP UI
 // ==========================================
+function promptSyncConflict(studentCount) {
+    if (document.getElementById('ghost-sync-modal')) return;
+
+    const modalHtml = `
+    <div id="ghost-sync-modal" class="modal-overlay" style="display: flex; z-index: 999999;">
+        <div class="modal-content" style="max-width: 400px; text-align: left; border-color: #f59e0b;">
+            <h3 style="color: #f59e0b; margin-top: 0; font-size: 1.5rem;">⚠️ Server Restart Detected</h3>
+            <p style="color: var(--text-main); font-size: 14px; line-height: 1.5;">The cloud server went to sleep and its memory was cleared. Your device currently has <strong>${studentCount} students</strong> saved locally.</p>
+            <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 25px;">If this is old "ghost" data, destroy it. If you want to restore the live system, upload it.</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button onclick="resolveSync('push')" style="background: var(--success); color: #000; font-weight: bold; border: none; padding: 12px; border-radius: 6px; cursor: pointer;">RESTORE CLOUD DATA</button>
+                <button onclick="resolveSync('wipe')" style="background: var(--error); color: #fff; font-weight: bold; border: none; padding: 12px; border-radius: 6px; cursor: pointer;">DESTROY LOCAL GHOSTS</button>
+            </div>
+        </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+window.resolveSync = async function(action) {
+    document.getElementById('ghost-sync-modal').remove();
+    sessionStorage.setItem('sync_conflict_resolved', 'true');
+    sessionStorage.setItem('sync_action', action);
+
+    if (action === 'push') {
+        await pushStudentsToCloud();
+        await pushLogsToCloud();
+        alert('Cloud restored successfully!');
+    } else {
+        localStorage.setItem('students', JSON.stringify([]));
+        localStorage.setItem('attendanceLogs', JSON.stringify([]));
+        localStorage.setItem('deletedDates', JSON.stringify([]));
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderStudents();
+            renderLogs();
+            renderMainDashboard();
+            renderSchedule();
+        }
+        alert('Local ghost data destroyed!');
+    }
+}
+
+// ==========================================
+// UPDATED: SAFELY PULL FROM CLOUD
+// ==========================================
+let isSyncing = false;
 async function pullFromCloud() {
+    if (isSyncing) return;
+    isSyncing = true;
     try {
         const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
         if (stuRes.ok) {
@@ -122,7 +169,14 @@ async function pullFromCloud() {
                     localStorage.setItem('students', JSON.stringify(cloudStudents));
                 }
             } else if (localStudents.length > 0 && isAuthenticated()) {
-                await pushStudentsToCloud();
+                // SERVER IS BLANK, BUT WE HAVE LOCAL DATA! Trigger Anti-Ghost Check
+                if (!sessionStorage.getItem('sync_conflict_resolved')) {
+                    promptSyncConflict(localStudents.length);
+                    isSyncing = false;
+                    return; // Halt sync until user decides
+                } else if (sessionStorage.getItem('sync_action') === 'push') {
+                    await pushStudentsToCloud();
+                }
             }
         }
         
@@ -138,19 +192,22 @@ async function pullFromCloud() {
                     localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
                 }
             } else if (localLogs.length > 0 && isAuthenticated()) {
-                await pushLogsToCloud();
+                if (sessionStorage.getItem('sync_action') === 'push') {
+                    await pushLogsToCloud();
+                }
             }
         }
     } catch (err) {
         console.warn("Cloud pull delayed.");
     }
+    isSyncing = false;
 }
 
 // ==========================================
 // DANGEROUS OVERWRITE ZONES (STRICTLY ADMIN ONLY)
 // ==========================================
 async function pushStudentsToCloud() {
-    if (!isAuthenticated()) return; // BLOCKS STUDENTS FROM WIPING DATA
+    if (!isAuthenticated()) return; 
     const data = JSON.parse(localStorage.getItem('students')) || [];
     try {
         await fetch(`${API_BASE_URL}/students/sync`, {
@@ -165,7 +222,7 @@ async function pushStudentsToCloud() {
 }
 
 async function pushLogsToCloud() {
-    if (!isAuthenticated()) return; // BLOCKS STUDENTS FROM WIPING DATA
+    if (!isAuthenticated()) return; 
     const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     try {
         const response = await fetch(`${API_BASE_URL}/logs/sync`, {
@@ -899,7 +956,7 @@ async function toggleStudentDay(id, day) {
 }
 
 // ==========================================
-// SAFELY APPEND LOGS WITHOUT WIPING (FIXED)
+// SAFELY APPEND LOGS WITHOUT WIPING
 // ==========================================
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
     if(isBackendLocked) {
@@ -920,8 +977,6 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
     };
 
     try {
-        // APPEND SAFELY TO CLOUD DIRECTLY
-        // This ensures the student's phone doesn't wipe out other people's data
         await fetch(`${API_BASE_URL}/logs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -931,7 +986,6 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
         console.error("Direct cloud append failed");
     }
 
-    // Save locally
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     logs.push(newLog);
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
@@ -1729,6 +1783,7 @@ function renderLogs() {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
+    // EXCLUDE GHOSTS
     const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const tbody = document.getElementById('attendance-logs-body');
     

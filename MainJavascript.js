@@ -2,8 +2,9 @@ console.log("%cSTOP!", "color: red; font-size: 50px; font-weight: bold; font-fam
 console.log("%cBawal ka dito panget", "color: white; background: red; font-size: 16px; padding: 5px 10px; border-radius: 5px;");
 
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
-
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
+
+const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
 
 const isAuthenticated = function() {
     const tk = sessionStorage.getItem('_auth_tkn_x92');
@@ -46,7 +47,10 @@ async function toggleAttendanceState(elem) {
     try {
         const response = await fetch(`${API_BASE_URL}/config/toggle`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
+            },
             body: JSON.stringify({ isLocked: isClosed })
         });
         
@@ -61,7 +65,7 @@ async function toggleAttendanceState(elem) {
                 knob.style.transform = !isClosed ? 'translateX(20px)' : 'translateX(0px)';
                 knob.parentElement.style.backgroundColor = !isClosed ? 'var(--error)' : '#334155';
             }
-            alert("Failed to sync lock state with server.");
+            alert("Failed to sync lock state with server. Check security key.");
         }
     } catch (err) {
         console.error("Lock Sync Error:", err);
@@ -135,7 +139,10 @@ async function pushStudentsToCloud() {
     try {
         await fetch(`${API_BASE_URL}/students/sync`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
+            },
             body: JSON.stringify(data)
         });
     } catch (err) { console.error("Cloud Student Sync Failed"); }
@@ -146,7 +153,10 @@ async function pushLogsToCloud() {
     try {
         const response = await fetch(`${API_BASE_URL}/logs/sync`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
+            },
             body: JSON.stringify(data)
         });
 
@@ -155,6 +165,8 @@ async function pushLogsToCloud() {
             isBackendLocked = true;
             localStorage.setItem('attendance_closed', 'true');
             applyUIRestrictions();
+        } else if (response.status === 401) {
+            console.error("Backend rejected sync: UNAUTHORIZED HACKER BLOCKED.");
         }
     } catch (err) { console.error("Cloud Log Sync Failed"); }
 }
@@ -477,7 +489,10 @@ async function createAdminAccount() {
     try {
         const response = await fetch(`${API_BASE_URL}/add-account`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Admin-Key': ADMIN_SECRET_KEY
+            },
             body: JSON.stringify({ username: user, password: pass })
         });
 
@@ -529,7 +544,10 @@ async function deleteAdminAccount(user) {
     if(!isAuthenticated()) return;
     if(!confirm(`Are you sure you want to delete the account: ${user}?`)) return;
     try {
-        const response = await fetch(`${API_BASE_URL}/delete-account/${user}`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE_URL}/delete-account/${user}`, { 
+            method: 'DELETE',
+            headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
+        });
         const data = await response.json();
         if(data.success) fetchAdminAccounts();
         else alert(data.message);
@@ -539,7 +557,10 @@ async function deleteAdminAccount(user) {
 async function generateRegistrationLink() {
     if(!isAuthenticated()) return;
     try {
-        const response = await fetch(`${API_BASE_URL}/register/generate`, { method: 'POST' });
+        const response = await fetch(`${API_BASE_URL}/register/generate`, { 
+            method: 'POST',
+            headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
+        });
         const data = await response.json();
         
         const link = `https://os-register.vercel.app/?token=${data.token}`;

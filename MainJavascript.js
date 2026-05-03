@@ -217,9 +217,8 @@ _studentsInit.forEach(s => {
         s.gcHandle = '';
         _needsSave = true;
     }
-    // NEW MIGRATION: Add class level to old students
     if (!s.classLevel) {
-        s.classLevel = 'Freshmen'; // default
+        s.classLevel = 'Freshmen'; 
         _needsSave = true;
     }
 });
@@ -630,6 +629,42 @@ async function createStudent() {
     }
 }
 
+async function updateStudentGC() {
+    if(!isAuthenticated()) return;
+    const idNum = document.getElementById('edit-student-id').value.trim();
+    const newGc = document.getElementById('edit-student-gc').value.trim();
+
+    if (!idNum) {
+        showMessage('edit-gc-message', 'Please enter a Student ID.', 'error');
+        return;
+    }
+
+    await pullFromCloud();
+
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const studentIndex = students.findIndex(s => s.id === idNum);
+
+    if (studentIndex === -1) {
+        showMessage('edit-gc-message', 'Student ID not found!', 'error');
+        return;
+    }
+
+    students[studentIndex].gcHandle = newGc;
+    localStorage.setItem('students', JSON.stringify(students));
+    await pushStudentsToCloud(); 
+
+    document.getElementById('edit-student-id').value = '';
+    document.getElementById('edit-student-gc').value = '';
+
+    showMessage('edit-gc-message', 'GC Handle updated globally!', 'success');
+    
+    renderStudents();
+    renderSchedule();
+    renderMainDashboard(); 
+    renderDashboardSummary();
+    renderDutyToday();
+}
+
 function openEditStudentModal(id) {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -1006,9 +1041,11 @@ async function removeExemptions(idNum, dateStr) {
 
 async function exemptAllForDate(dateStr) {
     if(!isAuthenticated()) return;
-    const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Excepted.\n\nTo confirm, type exactly:\nExcepted Everyone`);
     
-    if (verificationText === "Excepted Everyone") {
+    // TEXT UPDATED TO EXEMPT EVERYONE
+    const verificationText = prompt(`⚠️ WARNING ⚠️\n\nThis will mark EVERYONE on ${dateStr} as Exempted.\n\nTo confirm, type exactly:\nExempt Everyone`);
+    
+    if (verificationText === "Exempt Everyone") {
         await pullFromCloud();
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -1051,7 +1088,9 @@ async function exemptAllForDate(dateStr) {
         
         renderHistoryTable(dateStr);
         renderMainDashboard();
-        alert(`Successfully marked everyone as excepted for ${dateStr}!`);
+        
+        // TEXT UPDATED TO EXEMPTED
+        alert(`Successfully marked everyone as exempted for ${dateStr}!`);
         
     } else if (verificationText !== null) {
         alert("Action canceled. The confirmation text did not match exactly.");
@@ -1365,7 +1404,6 @@ function renderStudents() {
         const li = document.createElement('li');
         const safeId = student.id.replace(/'/g, "\\'"); 
         let gcTag = student.gcHandle ? `<span class="gc-tag">${student.gcHandle}</span>` : '';
-        // NEW: Display class level tag
         let classTag = student.classLevel ? `<span class="gc-tag" style="background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
         li.innerHTML = `

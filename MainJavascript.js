@@ -4,6 +4,7 @@ console.log("%cBawal ka dito panget", "color: white; background: red; font-size:
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
+// Secret Key to authenticate with the backend
 const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
 
 const isAuthenticated = function() {
@@ -104,6 +105,9 @@ function applyUIRestrictions() {
     });
 }
 
+// ==========================================
+// NEW GLOBAL WIPE SYNC LOGIC
+// ==========================================
 async function pullFromCloud() {
     try {
         const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
@@ -112,7 +116,12 @@ async function pullFromCloud() {
             const localStudents = JSON.parse(localStorage.getItem('students')) || [];
 
             if (cloudStudents.length > 0) {
-                localStorage.setItem('students', JSON.stringify(cloudStudents));
+                // IF THIS IS A GLOBAL WIPE TOMBSTONE FROM ANOTHER DEVICE, DELETE LOCAL MEMORY!
+                if (cloudStudents[0].id === 'SYS_WIPE_ALL') {
+                    localStorage.setItem('students', JSON.stringify([]));
+                } else {
+                    localStorage.setItem('students', JSON.stringify(cloudStudents));
+                }
             } else if (localStudents.length > 0) {
                 await pushStudentsToCloud();
             }
@@ -124,7 +133,12 @@ async function pullFromCloud() {
             const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
 
             if (cloudLogs.length > 0) {
-                localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
+                // IF THIS IS A GLOBAL WIPE TOMBSTONE FROM ANOTHER DEVICE, DELETE LOCAL MEMORY!
+                if (cloudLogs[0].id === 'SYS_WIPE_ALL' || cloudLogs[0].id === 'SYS_WIPE_LOGS') {
+                    localStorage.setItem('attendanceLogs', JSON.stringify([]));
+                } else {
+                    localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
+                }
             } else if (localLogs.length > 0) {
                 await pushLogsToCloud();
             }
@@ -357,10 +371,10 @@ function processPastShifts() {
 
         if (deletedDates.includes(checkDateStr)) continue;
 
-        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr) && s.id !== 'SYS_CONFIG_X99');
+        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr) && s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
         
         scheduledStudents.forEach(student => {
-            const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
+            const sLogs = logs.filter(l => String(l.id) === String(student.id) && l.date === checkDateStr);
             const hasTimeIn = sLogs.some(l => l.action.includes('In'));
             const hasTimeOut = sLogs.some(l => l.action.includes('Out') || l.action.includes('Exempted'));
             const hasNoAtt = sLogs.some(l => l.action === 'No Attendance');
@@ -1117,12 +1131,27 @@ async function exemptAllForDate(dateStr) {
     }
 }
 
+// ==========================================
+// NEW GLOBAL WIPE SYNC LOGIC FOR DEV LOGS
+// ==========================================
 async function devClearLogs() {
     if(!isAuthenticated()) return;
-    if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
+    if(confirm("This will permanently delete ALL attendance logs from the cloud database ACROSS ALL DEVICES. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
         localStorage.setItem('deletedDates', JSON.stringify([])); 
-        await pushLogsToCloud(); 
+        
+        // Push the Tombstone log to alert other devices
+        const wipeLog = [{ id: 'SYS_WIPE_LOGS', name: 'WIPED', action: 'WIPED', time: '', date: '', details: null }];
+        try {
+            await fetch(`${API_BASE_URL}/logs/sync`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Admin-Key': ADMIN_SECRET_KEY
+                },
+                body: JSON.stringify(wipeLog)
+            });
+        } catch(e) {}
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderLogs();
@@ -1130,7 +1159,49 @@ async function devClearLogs() {
             renderMainDashboard();
             renderDutyToday();
         }
-        showMessage('dev-message', 'All logs cleared from cloud!', 'success');
+        showMessage('dev-message', 'All logs cleared globally!', 'success');
+    }
+}
+
+// ==========================================
+// NEW GLOBAL WIPE SYNC LOGIC FOR FACTORY RESET
+// ==========================================
+async function factoryReset() {
+    if(!isAuthenticated()) return;
+    const firstConfirm = confirm("⚠️ DANGER ⚠️\n\nThis will permanently delete ALL registered students, attendance logs, custom UI settings, and custom Admin accounts ACROSS ALL DEVICES.\n\nAre you absolutely sure you want to do this?");
+    
+    if (firstConfirm) {
+        const verificationText = prompt("To confirm GLOBAL Factory Reset, type exactly:\n\nRESET EVERYTHING");
+        
+        if (verificationText === "RESET EVERYTHING") {
+            
+            // Send the Global Wipe 'Tombstone' to the cloud first
+            const wipePayload = [{ id: 'SYS_WIPE_ALL', name: 'WIPED', classLevel: '', gcHandle: '', assignedDays: [] }];
+            const wipeLog = [{ id: 'SYS_WIPE_ALL', name: 'WIPED', action: 'WIPED', time: '', date: '', details: null }];
+
+            try {
+                await fetch(`${API_BASE_URL}/students/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+                    body: JSON.stringify(wipePayload)
+                });
+                await fetch(`${API_BASE_URL}/logs/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+                    body: JSON.stringify(wipeLog)
+                });
+            } catch(e) { console.error("Wipe push failed"); }
+
+            // Then clear the local memory
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            alert("System wiped globally. All other connected devices will automatically erase their data within 15 seconds. The page will now reload.");
+            window.location.reload();
+            
+        } else if (verificationText !== null) {
+            alert("Factory Reset canceled. The text did not match exactly.");
+        }
     }
 }
 
@@ -1414,9 +1485,12 @@ function renderStudents() {
     const query = searchInput ? searchInput.value.toLowerCase() : '';
     
     list.innerHTML = '';
+    
+    // EXCLUDE SYSTEM WIPE TOMBSTONES FROM RENDERING
     let filteredStudents = students.filter(student => 
-        (student.name && student.name.toLowerCase().includes(query)) || 
-        (student.id && String(student.id).toLowerCase().includes(query))
+        student.id !== 'SYS_WIPE_ALL' && student.id !== 'SYS_CONFIG_X99' &&
+        ((student.name && student.name.toLowerCase().includes(query)) || 
+        (student.id && String(student.id).toLowerCase().includes(query)))
     );
 
     filteredStudents.sort((a, b) => a.name.localeCompare(b.name));
@@ -1635,7 +1709,8 @@ function renderLogs() {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+    // EXCLUDE GHOSTS
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const tbody = document.getElementById('attendance-logs-body');
     
     const searchInput = document.getElementById('search-attendance-global');
@@ -1654,6 +1729,8 @@ function renderLogs() {
     let logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
 
     let filteredLogs = logsWithIndex.filter(log => {
+        if (log.id === 'SYS_WIPE_ALL' || log.id === 'SYS_WIPE_LOGS') return false;
+        
         const student = validStudents.find(s => String(s.id) === String(log.id));
         const isScheduledToday = student && student.assignedDays && student.assignedDays.includes(currentDay);
         
@@ -1723,7 +1800,7 @@ function renderLogs() {
 function renderDutyToday() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dutyList = document.getElementById('duty-today-list');
     if (!dutyList) return;
@@ -1770,7 +1847,7 @@ function exportToExcel(dateStr = null) {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const shift = getShiftDateDetails();
     const targetDate = dateStr || shift.dateStr;
     const targetLogs = logs.filter(l => l.date === targetDate);
@@ -1881,7 +1958,7 @@ async function recordToGoogleSheets(dateStr) {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const targetLogs = logs.filter(l => l.date === dateStr);
 
     if (validStudents.length === 0) {
@@ -2102,7 +2179,7 @@ async function resetStudentUI() {
 function renderSchedule() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const tbody = document.getElementById('schedule-logs-body');
     
     const searchInput = document.getElementById('search-schedule');
@@ -2197,7 +2274,7 @@ function renderHistoryView() {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
     const globalDeletedDates = logs.filter(l => l.id === 'SYS_DELETED_DATE').map(l => l.date);
-    const validLogs = logs.filter(l => !globalDeletedDates.includes(l.date));
+    const validLogs = logs.filter(l => !globalDeletedDates.includes(l.date) && l.id !== 'SYS_WIPE_LOGS' && l.id !== 'SYS_WIPE_ALL');
 
     let uniqueDates = [...new Set(validLogs.map(l => l.date))];
     
@@ -2267,7 +2344,7 @@ function renderHistoryTable(dateStr) {
     const studentIds = new Set(dayLogs.map(l => String(l.id)));
 
     studentIds.forEach(id => {
-        if (id === 'SYS_DELETED_DATE' || id === 'SYS_CONFIG_X99') return; 
+        if (id === 'SYS_DELETED_DATE' || id === 'SYS_CONFIG_X99' || id === 'SYS_WIPE_ALL' || id === 'SYS_WIPE_LOGS') return; 
 
         const studentLogs = dayLogs.filter(l => String(l.id) === String(id));
         if (studentLogs.length === 0) return;
@@ -2402,7 +2479,7 @@ function renderMainDashboard() {
     if(!isAuthenticated()) return;
     try {
         const students = JSON.parse(localStorage.getItem('students')) || [];
-        const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+        const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
         const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         const shift = getShiftDateDetails();
         const todayStr = shift.dateStr;
@@ -2664,7 +2741,7 @@ function renderMainDashboard() {
 function renderDashboardSummary() {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const tbody = document.getElementById('summary-body');
     
@@ -3277,24 +3354,4 @@ async function isIncognito() {
             resolve(false);
         }
     });
-}
-
-function factoryReset() {
-    if(!isAuthenticated()) return;
-    const firstConfirm = confirm("⚠️ DANGER ⚠️\n\nThis will permanently delete ALL registered students, attendance logs, custom UI settings, and custom Admin accounts.\n\nAre you absolutely sure you want to do this?");
-    
-    if (firstConfirm) {
-        const verificationText = prompt("To confirm Factory Reset, type exactly:\n\nRESET EVERYTHING");
-        
-        if (verificationText === "RESET EVERYTHING") {
-            localStorage.clear();
-            sessionStorage.clear();
-            pushStudentsToCloud(); 
-            pushLogsToCloud(); 
-            alert("System wiped successfully. The page will now reload.");
-            window.location.reload();
-        } else if (verificationText !== null) {
-            alert("Factory Reset canceled. The text did not match exactly.");
-        }
-    }
 }

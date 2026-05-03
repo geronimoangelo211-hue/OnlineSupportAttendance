@@ -217,6 +217,11 @@ _studentsInit.forEach(s => {
         s.gcHandle = '';
         _needsSave = true;
     }
+    // NEW MIGRATION: Add class level to old students
+    if (!s.classLevel) {
+        s.classLevel = 'Freshmen'; // default
+        _needsSave = true;
+    }
 });
 if (_needsSave) {
     localStorage.setItem('students', JSON.stringify(_studentsInit));
@@ -328,7 +333,6 @@ function processPastShifts() {
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99');
     const deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || []; 
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -341,7 +345,7 @@ function processPastShifts() {
 
         if (deletedDates.includes(checkDateStr)) continue;
 
-        const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
+        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr) && s.id !== 'SYS_CONFIG_X99');
         
         scheduledStudents.forEach(student => {
             const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
@@ -564,9 +568,15 @@ async function createStudent() {
     const name = document.getElementById('new-student-name').value.trim();
     const idNum = document.getElementById('new-student-id').value.trim();
     const gcHandle = document.getElementById('new-student-gc').value.trim();
+    const classLevel = document.getElementById('new-student-class').value;
 
     if (!name || !idNum) {
         showMessage('admin-message', 'Please fill in Name and ID fields.', 'error');
+        return;
+    }
+    
+    if (!classLevel) {
+        showMessage('admin-message', 'Please select a Class Level.', 'error');
         return;
     }
 
@@ -591,7 +601,8 @@ async function createStudent() {
             name: name, 
             id: idNum, 
             assignedDays: [],
-            gcHandle: gcHandle
+            gcHandle: gcHandle,
+            classLevel: classLevel
         });
         
         localStorage.setItem('students', JSON.stringify(students));
@@ -600,6 +611,7 @@ async function createStudent() {
         document.getElementById('new-student-name').value = '';
         document.getElementById('new-student-id').value = '';
         document.getElementById('new-student-gc').value = '';
+        document.getElementById('new-student-class').value = '';
         
         showMessage('admin-message', 'Student created globally!', 'success');
         
@@ -618,42 +630,6 @@ async function createStudent() {
     }
 }
 
-async function updateStudentGC() {
-    if(!isAuthenticated()) return;
-    const idNum = document.getElementById('edit-student-id').value.trim();
-    const newGc = document.getElementById('edit-student-gc').value.trim();
-
-    if (!idNum) {
-        showMessage('edit-gc-message', 'Please enter a Student ID.', 'error');
-        return;
-    }
-
-    await pullFromCloud();
-
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    const studentIndex = students.findIndex(s => s.id === idNum);
-
-    if (studentIndex === -1) {
-        showMessage('edit-gc-message', 'Student ID not found!', 'error');
-        return;
-    }
-
-    students[studentIndex].gcHandle = newGc;
-    localStorage.setItem('students', JSON.stringify(students));
-    await pushStudentsToCloud(); 
-
-    document.getElementById('edit-student-id').value = '';
-    document.getElementById('edit-student-gc').value = '';
-
-    showMessage('edit-gc-message', 'GC Handle updated globally!', 'success');
-    
-    renderStudents();
-    renderSchedule();
-    renderMainDashboard(); 
-    renderDashboardSummary();
-    renderDutyToday();
-}
-
 function openEditStudentModal(id) {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
@@ -666,10 +642,17 @@ function openEditStudentModal(id) {
     
     const gcSelect = document.getElementById('edit-stu-gc');
     const gcOther = document.getElementById('edit-stu-gc-other');
+    const classSelect = document.getElementById('edit-stu-class');
     
     gcSelect.value = '';
     gcOther.style.display = 'none';
     gcOther.value = '';
+    
+    if (s.classLevel) {
+        classSelect.value = s.classLevel;
+    } else {
+        classSelect.value = 'Freshmen';
+    }
 
     if (s.gcHandle) {
         const optionExists = Array.from(gcSelect.options).some(opt => opt.value === s.gcHandle);
@@ -708,6 +691,7 @@ async function saveStudentEdit() {
     const origId = document.getElementById('edit-stu-orig-id').value;
     const name = document.getElementById('edit-stu-name').value.trim();
     const newId = document.getElementById('edit-stu-id').value.trim();
+    const classLevel = document.getElementById('edit-stu-class').value;
     let gc = document.getElementById('edit-stu-gc').value;
     
     if (gc === 'Other') {
@@ -741,6 +725,7 @@ async function saveStudentEdit() {
             s.name = name;
             s.id = newId; 
             s.gcHandle = gc;
+            s.classLevel = classLevel;
             localStorage.setItem('students', JSON.stringify(students));
             await pushStudentsToCloud();
             
@@ -894,10 +879,8 @@ function deleteHistoryDate(dateStr, event) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         
-        // Remove normal logs for this date
         logs = logs.filter(l => l.date !== dateStr);
         
-        // Push the Tombstone log to cloud to stop ghosts
         logs.push({
             name: 'SYSTEM_DELETED',
             id: 'SYS_DELETED_DATE',
@@ -1274,7 +1257,6 @@ async function handleTimeOut() {
         } 
 
         pendingTimeOutStudent = student;
-        // Shift hour 0-3 and exactly 4:00 AM evaluates as Late for the previous day. 
         pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
         pendingTimeOutDate = shift.dateStr; 
         
@@ -1383,10 +1365,12 @@ function renderStudents() {
         const li = document.createElement('li');
         const safeId = student.id.replace(/'/g, "\\'"); 
         let gcTag = student.gcHandle ? `<span class="gc-tag">${student.gcHandle}</span>` : '';
+        // NEW: Display class level tag
+        let classTag = student.classLevel ? `<span class="gc-tag" style="background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
         li.innerHTML = `
             <div style="display: flex; flex-direction: column;">
-                <div><span style="font-weight: bold; color: var(--text-main);">${student.name}</span> ${gcTag}</div>
+                <div style="display: flex; align-items: center; gap: 5px;"><span style="font-weight: bold; color: var(--text-main);">${student.name}</span> ${classTag} ${gcTag}</div>
                 <span style="font-size: 0.8rem; color: var(--text-muted);">ID: ${student.id}</span>
             </div>
             <div style="display: flex; gap: 5px;">
@@ -2025,7 +2009,8 @@ function renderSchedule() {
     let filteredStudents = validStudents.filter(student => 
         (student.name && student.name.toLowerCase().includes(query)) || 
         (student.id && student.id.toLowerCase().includes(query)) ||
-        (student.gcHandle && student.gcHandle.toLowerCase().includes(query))
+        (student.gcHandle && student.gcHandle.toLowerCase().includes(query)) ||
+        (student.classLevel && student.classLevel.toLowerCase().includes(query))
     );
 
     if (filterVal === 'UNASSIGNED') {
@@ -2062,11 +2047,12 @@ function renderSchedule() {
             return `<button class="day-toggle ${isActive ? 'active' : ''}" onclick="toggleStudentDay('${safeId}', '${day}')">${dayLabels[index]}</button>`;
         }).join('');
         
-        let gcTagHtml = student.gcHandle ? `<span class="gc-tag" style="margin: 0; font-size: 10px; padding: 2px 6px;">${student.gcHandle}</span>` : '<span style="color: var(--text-muted); font-size: 11px;">None</span>';
+        let gcTagHtml = student.gcHandle ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px;">${student.gcHandle}</span>` : '<span style="color: var(--text-muted); font-size: 11px; margin-right:4px;">None</span>';
+        let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
         tr.innerHTML = `
             <td style="white-space: normal;"><strong style="color: var(--text-main);">${student.name}</strong></td>
-            <td style="white-space: normal;">${gcTagHtml}</td>
+            <td style="white-space: normal;">${classTagHtml}${gcTagHtml}</td>
             <td style="white-space: normal; color: var(--text-muted);">${student.id}</td>
             <td style="white-space: normal; width: 100%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">

@@ -106,7 +106,7 @@ function applyUIRestrictions() {
 }
 
 // ==========================================
-// NEW GLOBAL WIPE SYNC LOGIC
+// GLOBAL WIPE SYNC LOGIC
 // ==========================================
 async function pullFromCloud() {
     try {
@@ -1132,7 +1132,7 @@ async function exemptAllForDate(dateStr) {
 }
 
 // ==========================================
-// NEW GLOBAL WIPE SYNC LOGIC FOR DEV LOGS
+// GLOBAL WIPE SYNC LOGIC FOR DEV LOGS
 // ==========================================
 async function devClearLogs() {
     if(!isAuthenticated()) return;
@@ -1164,7 +1164,7 @@ async function devClearLogs() {
 }
 
 // ==========================================
-// NEW GLOBAL WIPE SYNC LOGIC FOR FACTORY RESET
+// GLOBAL WIPE SYNC LOGIC FOR FACTORY RESET
 // ==========================================
 async function factoryReset() {
     if(!isAuthenticated()) return;
@@ -1205,6 +1205,9 @@ async function factoryReset() {
     }
 }
 
+// ==========================================
+// UPDATED TIME IN LOGIC: 12:01 PM DEADLINE
+// ==========================================
 async function handleTimeIn() {
     if (isBackendLocked) {
         showMessage('student-message', 'Access Denied: The system is locked.', 'error');
@@ -1271,10 +1274,15 @@ async function handleTimeIn() {
             return;
         }
 
+        // TIME IN CONDITIONS
         if (shift.hour < 5) {
             showMessage('student-message', 'Time In opens at 5:00 AM.', 'error');
             initSliderCaptcha();
             return;
+        } else if (shift.hour > 12 || (shift.hour === 12 && shift.min >= 1)) {
+            // NEW: If time is 12:01 PM or later, reject Time In and mark No Attendance
+            await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
+            showMessage('student-message', 'Time In is closed. You are marked as No Attendance.', 'error');
         } else if (shift.hour > 8 || (shift.hour === 8 && shift.min >= 1)) { 
             await logAttendanceAction(student, 'Time In (Late)', null, shift.dateStr);
             showMessage('student-message', 'Successfully logged Time In (Late)', 'success');

@@ -3,7 +3,6 @@ console.log("%cBawal ka dito panget", "color: white; background: red; font-size:
 
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 
-// SCRIPT URL FOR GOOGLE SHEETS
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
 const isAuthenticated = function() {

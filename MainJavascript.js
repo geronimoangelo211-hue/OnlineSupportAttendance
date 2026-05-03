@@ -3,7 +3,7 @@ console.log("%cBawal ka dito panget", "color: white; background: red; font-size:
 
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 
-// NEW SCRIPT URL FOR GOOGLE SHEETS
+// SCRIPT URL FOR GOOGLE SHEETS
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
 const isAuthenticated = function() {
@@ -100,7 +100,6 @@ function applyUIRestrictions() {
         }
     });
 }
-
 
 async function pullFromCloud() {
     try {
@@ -594,7 +593,7 @@ async function createStudent() {
 
         const students = JSON.parse(localStorage.getItem('students')) || [];
         
-        if (students.some(s => s.id.toLowerCase() === idNum.toLowerCase())) {
+        if (students.some(s => String(s.id).toLowerCase() === String(idNum).toLowerCase())) {
             showMessage('admin-message', 'Student ID already exists!', 'error');
             return;
         }
@@ -645,7 +644,7 @@ async function updateStudentGC() {
     await pullFromCloud();
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const studentIndex = students.findIndex(s => s.id === idNum);
+    const studentIndex = students.findIndex(s => String(s.id) === String(idNum));
 
     if (studentIndex === -1) {
         showMessage('edit-gc-message', 'Student ID not found!', 'error');
@@ -671,7 +670,7 @@ async function updateStudentGC() {
 function openEditStudentModal(id) {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const s = students.find(x => x.id === id);
+    const s = students.find(x => String(x.id) === String(id));
     if (!s) return;
     
     document.getElementById('edit-stu-orig-id').value = s.id;
@@ -752,12 +751,12 @@ async function saveStudentEdit() {
         await pullFromCloud();
         const students = JSON.parse(localStorage.getItem('students')) || [];
         
-        if (newId !== origId && students.some(x => x.id.toLowerCase() === newId.toLowerCase())) {
+        if (newId !== origId && students.some(x => String(x.id).toLowerCase() === String(newId).toLowerCase())) {
             alert("This Student ID is already in use by another student!");
             return;
         }
 
-        const s = students.find(x => x.id === origId);
+        const s = students.find(x => String(x.id) === String(origId));
         
         if (s) {
             s.name = name;
@@ -772,7 +771,7 @@ async function saveStudentEdit() {
                 let logsUpdated = false;
                 
                 logs.forEach(l => {
-                    if (l.id === origId) {
+                    if (String(l.id) === String(origId)) {
                         l.id = newId;
                         l.name = name; 
                         logsUpdated = true;
@@ -811,7 +810,7 @@ async function deleteStudent(idNum) {
     await pullFromCloud();
 
     let students = JSON.parse(localStorage.getItem('students')) || [];
-    students = students.filter(s => s.id !== idNum);
+    students = students.filter(s => String(s.id) !== String(idNum));
     localStorage.setItem('students', JSON.stringify(students));
     await pushStudentsToCloud(); 
     
@@ -834,7 +833,7 @@ async function deleteStudent(idNum) {
 async function toggleStudentDay(id, day) {
     if(!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const student = students.find(s => s.id === id);
+    const student = students.find(s => String(s.id) === String(id));
     
     if (student) {
         if (!student.assignedDays) student.assignedDays = [];
@@ -972,16 +971,16 @@ async function applyExempt(type) {
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const s = students.find(x => x.id === pendingExemptId);
+    const s = students.find(x => String(x.id) === String(pendingExemptId));
     
     if (s) {
-        const existingInLog = logs.find(l => l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('In') && !l.action.includes('Exempted'));
-        const existingOutLog = logs.find(l => l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('Out') && !l.action.includes('Exempted'));
+        const existingInLog = logs.find(l => String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('In') && !l.action.includes('Exempted'));
+        const existingOutLog = logs.find(l => String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Out') && !l.action.includes('Exempted'));
 
-        logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && (l.action.includes('Exempted') || l.action === 'No Attendance')));
+        logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && (l.action.includes('Exempted') || l.action === 'No Attendance')));
 
         if (type === 'IN' || type === 'BOTH') {
-            logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('In')));
+            logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('In')));
             logs.push({
                 name: s.name,
                 id: s.id,
@@ -994,7 +993,7 @@ async function applyExempt(type) {
         }
         
         if (type === 'OUT' || type === 'BOTH') {
-            logs = logs.filter(l => !(l.id === pendingExemptId && l.date === pendingExemptDate && l.action.includes('Out')));
+            logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Out')));
             logs.push({
                 name: s.name,
                 id: s.id,
@@ -1025,9 +1024,9 @@ async function removeExemptions(idNum, dateStr) {
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
-    const exemptLogs = logs.filter(l => l.id === idNum && l.date === dateStr && l.action.includes('Exempted'));
+    const exemptLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted'));
     
-    logs = logs.filter(l => !(l.id === idNum && l.date === dateStr && l.action.includes('Exempted')));
+    logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted')));
     
     exemptLogs.forEach(el => {
         if (el.originalLog) {
@@ -1053,16 +1052,16 @@ async function exemptAllForDate(dateStr) {
         const students = JSON.parse(localStorage.getItem('students')) || [];
 
         const dayLogs = logs.filter(l => l.date === dateStr);
-        const studentIds = [...new Set(dayLogs.map(l => l.id))];
+        const studentIds = [...new Set(dayLogs.map(l => String(l.id)))];
 
         studentIds.forEach(idNum => {
-            const s = students.find(x => x.id === idNum);
+            const s = students.find(x => String(x.id) === String(idNum));
             if (!s) return;
 
-            const existingInLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
-            const existingOutLog = logs.find(l => l.id === idNum && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
+            const existingInLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
+            const existingOutLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
 
-            logs = logs.filter(l => !(l.id === idNum && l.date === dateStr));
+            logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr));
 
             logs.push({
                 name: s.name,
@@ -1151,7 +1150,7 @@ async function handleTimeIn() {
         }
 
         const students = JSON.parse(localStorage.getItem('students')) || [];
-        const student = students.find(s => s.id === idNum);
+        const student = students.find(s => String(s.id) === String(idNum));
         if (!student) { 
             showMessage('student-message', 'ID not found.', 'error'); 
             initSliderCaptcha(); 
@@ -1242,7 +1241,7 @@ async function handleTimeOut() {
         }
 
         const students = JSON.parse(localStorage.getItem('students')) || [];
-        const student = students.find(s => s.id === idNum);
+        const student = students.find(s => String(s.id) === String(idNum));
         if (!student) { 
             showMessage('student-message', 'ID not found.', 'error'); 
             initSliderCaptcha(); 
@@ -1397,13 +1396,13 @@ function renderStudents() {
     list.innerHTML = '';
     let filteredStudents = students.filter(student => 
         (student.name && student.name.toLowerCase().includes(query)) || 
-        (student.id && student.id.toLowerCase().includes(query))
+        (student.id && String(student.id).toLowerCase().includes(query))
     );
 
     filteredStudents.sort((a, b) => a.name.localeCompare(b.name));
     filteredStudents.forEach(student => {
         const li = document.createElement('li');
-        const safeId = student.id.replace(/'/g, "\\'"); 
+        const safeId = String(student.id).replace(/'/g, "\\'"); 
         let gcTag = student.gcHandle ? `<span class="gc-tag">${student.gcHandle}</span>` : '';
         let classTag = student.classLevel ? `<span class="gc-tag" style="background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
@@ -1635,17 +1634,17 @@ function renderLogs() {
     let logsWithIndex = logs.map((log, index) => ({ ...log, originalIndex: index }));
 
     let filteredLogs = logsWithIndex.filter(log => {
-        const student = validStudents.find(s => s.id === log.id);
+        const student = validStudents.find(s => String(s.id) === String(log.id));
         const isScheduledToday = student && student.assignedDays && student.assignedDays.includes(currentDay);
         
         return log.date === todayStr &&
                isScheduledToday &&
-               (log.name.toLowerCase().includes(query) || log.id.toLowerCase().includes(query));
+               (log.name.toLowerCase().includes(query) || String(log.id).toLowerCase().includes(query));
     });
 
     filteredLogs.sort((a, b) => {
-        const stuA = validStudents.find(s => s.id === a.id) || {};
-        const stuB = validStudents.find(s => s.id === b.id) || {};
+        const stuA = validStudents.find(s => String(s.id) === String(a.id)) || {};
+        const stuB = validStudents.find(s => String(s.id) === String(b.id)) || {};
         
         const nameA = (a.name || '').toLowerCase().trim();
         const nameB = (b.name || '').toLowerCase().trim();
@@ -1667,7 +1666,7 @@ function renderLogs() {
             if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
             return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
         }
-        return b.originalIndex - a.originalIndex; // fallback to original timeline
+        return b.originalIndex - a.originalIndex; 
     });
 
     filteredLogs.forEach(log => {
@@ -1724,8 +1723,8 @@ function renderDutyToday() {
     }
 
     scheduledToday.forEach(student => {
-        const hasTimedIn = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('In'));
-        const hasTimedOut = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
+        const hasTimedIn = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('In'));
+        const hasTimedOut = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
 
         let statusDot = '#f59e0b'; 
         if (hasTimedOut) {
@@ -1761,13 +1760,23 @@ function exportToExcel(dateStr = null) {
     const targetDayStr = dayNames[targetDateObj.getDay()];
 
     const data = [
-        ["NAME", "ID NUMBER", "TIME IN", "TIME OUT", "DATE", "GC HANDLE", "ANNOUNCEMENT", "POSTED BY"]
+        ["NAME", "ID NUMBER", "GROUP", "TIME IN", "TIME OUT", "DATE", "GC HANDLE", "ANNOUNCEMENT", "POSTED BY"]
     ];
 
-    const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedStudents = [...validStudents].sort((a, b) => {
+        const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
+        const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
+        const nameA = (a.name || '').toLowerCase().trim();
+        const nameB = (b.name || '').toLowerCase().trim();
+
+        if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
+        if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
+        
+        return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+    });
 
     sortedStudents.forEach(student => {
-        const studentLogs = targetLogs.filter(l => l.id === student.id);
+        const studentLogs = targetLogs.filter(l => String(l.id) === String(student.id));
         
         let isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
         if (studentLogs.some(l => l.action.includes('In') || l.action.includes('Out') || l.action === 'No Attendance')) {
@@ -1821,12 +1830,12 @@ function exportToExcel(dateStr = null) {
             }
         }
 
-        data.push([student.name, student.id, inText, outText, targetDate, gc, ann, post]);
+        data.push([student.name, student.id, student.classLevel || 'Freshmen', inText, outText, targetDate, gc, ann, post]);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(data);
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 9; i++) {
         const cellRef = XLSX.utils.encode_cell({c:i, r:0});
         if (ws[cellRef]) {
             ws[cellRef].s = {
@@ -1837,7 +1846,7 @@ function exportToExcel(dateStr = null) {
     }
 
     ws['!cols'] = [
-        { wpx: 180 }, { wpx: 120 }, { wpx: 150 }, { wpx: 150 },
+        { wpx: 180 }, { wpx: 120 }, { wpx: 120 }, { wpx: 150 }, { wpx: 150 },
         { wpx: 100 }, { wpx: 150 }, { wpx: 120 }, { wpx: 200 } 
     ];
 
@@ -1874,12 +1883,21 @@ async function recordToGoogleSheets(dateStr) {
     const targetDayStr = dayNames[targetDateObj.getDay()];
 
     const payload = [];
-    const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedStudents = [...validStudents].sort((a, b) => {
+        const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
+        const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
+        const nameA = (a.name || '').toLowerCase().trim();
+        const nameB = (b.name || '').toLowerCase().trim();
+
+        if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
+        if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
+        
+        return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+    });
 
     sortedStudents.forEach(student => {
-        const studentLogs = targetLogs.filter(l => l.id === student.id);
+        const studentLogs = targetLogs.filter(l => String(l.id) === String(student.id));
         
-        // Ensure that even if a student wasn't scheduled, but manually logged in anyway, they get tracked as present/absent
         let isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
         if (studentLogs.some(l => l.action.includes('In') || l.action.includes('Out') || l.action === 'No Attendance')) {
             isScheduled = true;
@@ -1935,6 +1953,7 @@ async function recordToGoogleSheets(dateStr) {
         payload.push({
             name: student.name,
             id: student.id,
+            classLevel: student.classLevel || 'Freshmen', 
             timeIn: inText,
             timeOut: outText,
             date: dateStr,
@@ -2016,7 +2035,7 @@ function getPHTDayString() {
 function getTodayLogs(idNum) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const shift = getShiftDateDetails();
-    return logs.filter(l => l.id === idNum && l.date === shift.dateStr);
+    return logs.filter(l => String(l.id) === String(idNum) && l.date === shift.dateStr);
 }
 
 function showLockedScreen(message) {
@@ -2082,7 +2101,7 @@ function renderSchedule() {
     
     let filteredStudents = validStudents.filter(student => 
         (student.name && student.name.toLowerCase().includes(query)) || 
-        (student.id && student.id.toLowerCase().includes(query)) ||
+        (student.id && String(student.id).toLowerCase().includes(query)) ||
         (student.gcHandle && student.gcHandle.toLowerCase().includes(query)) ||
         (student.classLevel && student.classLevel.toLowerCase().includes(query))
     );
@@ -2126,7 +2145,7 @@ function renderSchedule() {
 
     filteredStudents.forEach(student => {
         const tr = document.createElement('tr');
-        const safeId = student.id.replace(/'/g, "\\'");
+        const safeId = String(student.id).replace(/'/g, "\\'");
         
         let togglesHtml = days.map((day, index) => {
             const isActive = student.assignedDays && student.assignedDays.includes(day);
@@ -2225,12 +2244,12 @@ function renderHistoryTable(dateStr) {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    const studentIds = new Set(dayLogs.map(l => l.id));
+    const studentIds = new Set(dayLogs.map(l => String(l.id)));
 
     studentIds.forEach(id => {
         if (id === 'SYS_DELETED_DATE' || id === 'SYS_CONFIG_X99') return; 
 
-        const studentLogs = dayLogs.filter(l => l.id === id);
+        const studentLogs = dayLogs.filter(l => String(l.id) === String(id));
         if (studentLogs.length === 0) return;
         
         const name = studentLogs[0].name;
@@ -2379,7 +2398,7 @@ function renderMainDashboard() {
         let lateCount = 0;
 
         scheduledToday.forEach(student => {
-            const studentTodayLogs = logs.filter(l => l.id === student.id && l.date === todayStr);
+            const studentTodayLogs = logs.filter(l => String(l.id) === String(student.id) && l.date === todayStr);
             const timeInLog = studentTodayLogs.find(l => l.action.includes('In') || l.action.includes('Exempted'));
             
             if (timeInLog) {
@@ -2537,7 +2556,7 @@ function renderMainDashboard() {
             let deadCount = 0;
 
             validStudents.forEach(student => {
-                const recentLog = logs.find(l => l.id === student.id && new Date(l.date) >= cutoffDate);
+                const recentLog = logs.find(l => String(l.id) === String(student.id) && new Date(l.date) >= cutoffDate);
                 if (!recentLog) {
                     deadCount++;
                     deadStudentsList.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
@@ -2554,7 +2573,7 @@ function renderMainDashboard() {
         let perfList = [];
 
         validStudents.forEach(student => {
-            const studentLogs = logs.filter(l => l.id === student.id);
+            const studentLogs = logs.filter(l => String(l.id) === String(student.id));
             if (studentLogs.length === 0) return;
 
             let onTimeIn = 0;
@@ -2646,7 +2665,7 @@ function renderDashboardSummary() {
 
     let filteredStudents = scheduledToday.filter(student => 
         student.name.toLowerCase().includes(query) || 
-        student.id.toLowerCase().includes(query)
+        String(student.id).toLowerCase().includes(query)
     );
 
     filteredStudents.sort((a, b) => {
@@ -2674,8 +2693,8 @@ function renderDashboardSummary() {
     });
 
     filteredStudents.forEach(student => {
-        const hasTimedOutToday = logs.some(l => l.id === student.id && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
-        const hasTimedInToday = logs.some(l => l.id === student.id && l.date === todayStr && l.action.includes('In'));
+        const hasTimedOutToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
+        const hasTimedInToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('In'));
         
         let todayShiftBtn = '';
         if (hasTimedOutToday) {
@@ -2714,10 +2733,10 @@ function viewPerformance(idNum) {
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
-    const student = students.find(s => s.id === idNum);
+    const student = students.find(s => String(s.id) === String(idNum));
     if (!student) return;
 
-    const studentLogs = logs.filter(l => l.id === idNum);
+    const studentLogs = logs.filter(l => String(l.id) === String(idNum));
 
     let onTimeIn = 0;
     let lateIn = 0;
@@ -2802,7 +2821,7 @@ function toggleOtherGC(val) {
 function viewTodayShift(idNum, dateStr) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
-    const dayLogs = logs.filter(l => l.id === idNum && l.date === dateStr);
+    const dayLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr);
     const timeInLog = dayLogs.find(l => l.action.includes('In') || l.action.includes('Exempted'));
     const timeOutLog = dayLogs.find(l => l.action.includes('Out') || l.action.includes('Exempted'));
     
@@ -3181,7 +3200,7 @@ function checkDeviceLock() {
 
     if (activeId) {
         const students = JSON.parse(localStorage.getItem('students')) || [];
-        const student = students.find(s => s.id === activeId);
+        const student = students.find(s => String(s.id) === String(activeId));
         
         if (student) {
             const todayLogs = getTodayLogs(activeId);

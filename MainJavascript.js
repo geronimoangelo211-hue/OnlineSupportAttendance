@@ -14,6 +14,74 @@ const isAuthenticated = function() {
     }
 };
 
+async function pullFromCloud() {
+    try {
+        const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
+        if (stuRes.ok) {
+            const cloudStudents = await stuRes.json();
+            const localStudents = JSON.parse(localStorage.getItem('students')) || [];
+
+            if (cloudStudents.length > 0) {
+                localStorage.setItem('students', JSON.stringify(cloudStudents));
+            } else if (localStudents.length > 0) {
+                await pushStudentsToCloud();
+            }
+        }
+        
+        const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
+        if (logRes.ok) {
+            const cloudLogs = await logRes.json();
+            const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+
+            if (cloudLogs.length > 0) {
+                localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
+            } else if (localLogs.length > 0) {
+                await pushLogsToCloud();
+            }
+        }
+    } catch (err) {
+        console.warn("Cloud pull delayed.");
+    }
+}
+
+async function pushStudentsToCloud() {
+    const data = JSON.parse(localStorage.getItem('students')) || [];
+    try {
+        await fetch(`${API_BASE_URL}/students/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+    } catch (err) { console.error("Cloud Student Sync Failed"); }
+}
+
+async function pushLogsToCloud() {
+    const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    try {
+        const response = await fetch(`${API_BASE_URL}/logs/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.status === 403) {
+            console.warn("Backend rejected sync: SYSTEM IS LOCKED.");
+            isBackendLocked = true;
+            localStorage.setItem('attendance_closed', 'true');
+            applyUIRestrictions();
+        }
+    } catch (err) { console.error("Cloud Log Sync Failed"); }
+}
+
+let pendingTimeOutStudent = null;
+let pendingTimeOutAction = null;
+let pendingTimeOutDate = null;
+let settingsClickCount = 0; 
+let pendingExemptId = null;
+let pendingExemptDate = null;
+let pendingExemptCheckbox = null;
+
+// --- ATTENDANCE SYSTEM LOCK LOGIC ---
 let isBackendLocked = false; 
 
 async function checkBackendLockStatus() {
@@ -98,74 +166,6 @@ function applyUIRestrictions() {
     });
 }
 
-
-async function pullFromCloud() {
-    try {
-        const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
-        if (stuRes.ok) {
-            const cloudStudents = await stuRes.json();
-            const localStudents = JSON.parse(localStorage.getItem('students')) || [];
-
-            if (cloudStudents.length > 0) {
-                localStorage.setItem('students', JSON.stringify(cloudStudents));
-            } else if (localStudents.length > 0) {
-                await pushStudentsToCloud();
-            }
-        }
-        
-        const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
-        if (logRes.ok) {
-            const cloudLogs = await logRes.json();
-            const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-
-            if (cloudLogs.length > 0) {
-                localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
-            } else if (localLogs.length > 0) {
-                await pushLogsToCloud();
-            }
-        }
-    } catch (err) {
-        console.warn("Cloud pull delayed.");
-    }
-}
-
-async function pushStudentsToCloud() {
-    const data = JSON.parse(localStorage.getItem('students')) || [];
-    try {
-        await fetch(`${API_BASE_URL}/students/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-    } catch (err) { console.error("Cloud Student Sync Failed"); }
-}
-
-async function pushLogsToCloud() {
-    const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    try {
-        const response = await fetch(`${API_BASE_URL}/logs/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        if (response.status === 403) {
-            console.warn("Backend rejected sync: SYSTEM IS LOCKED.");
-            isBackendLocked = true;
-            localStorage.setItem('attendance_closed', 'true');
-            applyUIRestrictions();
-        }
-    } catch (err) { console.error("Cloud Log Sync Failed"); }
-}
-
-let pendingTimeOutStudent = null;
-let pendingTimeOutAction = null;
-let pendingTimeOutDate = null;
-let settingsClickCount = 0; 
-let pendingExemptId = null;
-let pendingExemptDate = null;
-let pendingExemptCheckbox = null;
-
 function getShiftDateDetails() {
     const pht = getPHT();
     const hour = pht.getHours();
@@ -199,6 +199,7 @@ const ACCENT_COLORS = {
 
 if (!localStorage.getItem('students')) localStorage.setItem('students', JSON.stringify([]));
 if (!localStorage.getItem('attendanceLogs')) localStorage.setItem('attendanceLogs', JSON.stringify([]));
+if (!localStorage.getItem('deletedDates')) localStorage.setItem('deletedDates', JSON.stringify([]));
 
 let _studentsInit = JSON.parse(localStorage.getItem('students')) || [];
 let _needsSave = false;
@@ -312,7 +313,6 @@ setInterval(async () => {
     }
 }, 15000);
 
-// --- UNIFIED SHIFT ROLLOVER (WITH GLOBAL GHOST PREVENTION) ---
 function processPastShifts() {
     if(isBackendLocked) return false;
 
@@ -328,9 +328,7 @@ function processPastShifts() {
     
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    
-    // Identifies dates permanently deleted by ANY device
-    const globalDeletedDates = logs.filter(l => l.id === 'SYS_DELETED_DATE').map(l => l.date); 
+    const deletedDates = JSON.parse(localStorage.getItem('deletedDates')) || []; 
     let updated = false;
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -340,10 +338,9 @@ function processPastShifts() {
         let checkDateStr = checkDate.toLocaleDateString('en-US');
         let checkDayStr = dayNames[checkDate.getDay()];
 
-        // If this date has a tombstone flag, SKIP IT to prevent ghost data respawning
-        if (globalDeletedDates.includes(checkDateStr)) continue;
+        if (deletedDates.includes(checkDateStr)) continue;
 
-        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr));
+        const scheduledStudents = students.filter(s => s.assignedDays && s.assignedDays.includes(checkDayStr) && s.id !== 'SYS_CONFIG_X99');
         
         scheduledStudents.forEach(student => {
             const sLogs = logs.filter(l => l.id === student.id && l.date === checkDateStr);
@@ -383,6 +380,7 @@ function processPastShifts() {
     if (updated) {
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
         pushLogsToCloud(); 
+        enforceHistoryLimit(); 
     }
     return updated;
 }
@@ -859,6 +857,8 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
     
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     await pushLogsToCloud();
+
+    enforceHistoryLimit(); 
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
         renderLogs();
@@ -893,10 +893,8 @@ function deleteHistoryDate(dateStr, event) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         
-        // Remove normal logs for this date
         logs = logs.filter(l => l.date !== dateStr);
         
-        // Push the Tombstone log to cloud to stop ghosts
         logs.push({
             name: 'SYSTEM_DELETED',
             id: 'SYS_DELETED_DATE',
@@ -1078,6 +1076,7 @@ async function devClearLogs() {
     if(!isAuthenticated()) return;
     if(confirm("This will permanently delete ALL attendance logs from the cloud database. Continue?")) {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
+        localStorage.setItem('deletedDates', JSON.stringify([])); 
         await pushLogsToCloud(); 
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -1697,6 +1696,10 @@ function exportToExcel(dateStr = null) {
     const targetDate = dateStr || shift.dateStr;
     const targetLogs = logs.filter(l => l.date === targetDate);
 
+    const targetDateObj = new Date(targetDate);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDayStr = dayNames[targetDateObj.getDay()];
+
     const data = [
         ["NAME", "ID NUMBER", "TIME IN", "TIME OUT", "DATE", "GC HANDLE", "ANNOUNCEMENT", "POSTED BY"]
     ];
@@ -1705,17 +1708,18 @@ function exportToExcel(dateStr = null) {
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
+        const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
+
+        let inText = isScheduled ? 'Absent' : 'No Duty Today';
+        let outText = isScheduled ? 'Absent' : 'No Duty Today';
+        let gc = '-';
+        let ann = '-';
+        let post = '-';
 
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
         const exemptLog = studentLogs.find(l => l.action === 'Exempted');
-
-        let inText = 'Absent';
-        let outText = 'Absent';
-        let gc = '-';
-        let ann = '-';
-        let post = '-';
 
         if (exemptLog) {
             inText = 'Exempted';
@@ -1795,22 +1799,27 @@ async function recordToGoogleSheets(dateStr) {
         sheetBtn.style.opacity = "0.5";
     }
 
+    const targetDateObj = new Date(dateStr);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDayStr = dayNames[targetDateObj.getDay()];
+
     const payload = [];
     const sortedStudents = [...validStudents].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedStudents.forEach(student => {
         const studentLogs = targetLogs.filter(l => l.id === student.id);
+        const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
+
+        let inText = isScheduled ? 'Absent' : 'No Duty Today';
+        let outText = isScheduled ? 'Absent' : 'No Duty Today';
+        let gc = '-';
+        let ann = '-';
+        let post = '-';
 
         const timeInLog = studentLogs.find(l => l.action.includes('In'));
         const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
         const exemptLog = studentLogs.find(l => l.action === 'Exempted');
-
-        let inText = 'Absent';
-        let outText = 'Absent';
-        let gc = '-';
-        let ann = '-';
-        let post = '-';
 
         if (exemptLog) {
             inText = 'Exempted';

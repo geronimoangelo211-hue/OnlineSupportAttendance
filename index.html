@@ -337,6 +337,14 @@
                             <div class="form-group">
                                 <input type="text" id="new-student-name" placeholder="Student Name">
                                 <input type="text" id="new-student-id" placeholder="Student ID Number">
+                                
+                                <!-- Updated: Added Class Level Select -->
+                                <select id="new-student-class">
+                                    <option value="">-- Assign Class Level --</option>
+                                    <option value="Freshmen">Freshmen</option>
+                                    <option value="UpperClassmen">UpperClassmen</option>
+                                </select>
+
                                 <select id="new-student-gc">
                                     <option value="">-- Assign GC Handle --</option>
                                     <option value="BSA">BSA</option>
@@ -408,7 +416,7 @@
                             <thead>
                                 <tr>
                                     <th>Name</th>
-                                    <th>Tag</th>
+                                    <th>Tags</th>
                                     <th>ID Number</th>
                                     <th>Assigned Days</th>
                                 </tr>
@@ -599,6 +607,13 @@
             <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">Student ID</label>
             <input type="text" id="edit-stu-id">
             
+            <!-- Updated: Edit Class Level Select -->
+            <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">Class Level</label>
+            <select id="edit-stu-class">
+                <option value="Freshmen">Freshmen</option>
+                <option value="UpperClassmen">UpperClassmen</option>
+            </select>
+
             <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">GC Handle</label>
             <select id="edit-stu-gc" onchange="toggleEditStudentOtherGC(this.value)">
                 <option value="">-- Assign GC Handle --</option>

@@ -338,7 +338,6 @@
                                 <input type="text" id="new-student-name" placeholder="Student Name">
                                 <input type="text" id="new-student-id" placeholder="Student ID Number">
                                 
-                                <!-- Updated: Added Class Level Select -->
                                 <select id="new-student-class">
                                     <option value="">-- Assign Class Level --</option>
                                     <option value="Freshmen">Freshmen</option>
@@ -443,7 +442,8 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 15px;">
                             <h4 id="history-table-title" style="color: var(--accent); margin: 0; font-size: 1.1rem;">Logs</h4>
                             <div style="display: flex; gap: 10px;">
-                                <button id="history-exempt-all-btn" style="background: rgba(102, 252, 241, 0.1); color: #66fcf1; border: 1px solid #66fcf1; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Excepted All</button>
+                                <!-- TEXT UPDATED HERE TO EXEMPT ALL -->
+                                <button id="history-exempt-all-btn" style="background: rgba(102, 252, 241, 0.1); color: #66fcf1; border: 1px solid #66fcf1; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Exempt All</button>
                                 <button id="history-sheet-btn" style="background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid #22c55e; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Record Today Google Sheets</button>
                                 <button id="history-export-btn" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); border: 1px solid var(--accent); padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Export Excel</button>
                             </div>
@@ -607,7 +607,6 @@
             <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">Student ID</label>
             <input type="text" id="edit-stu-id">
             
-            <!-- Updated: Edit Class Level Select -->
             <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-top: 10px; display: block;">Class Level</label>
             <select id="edit-stu-class">
                 <option value="Freshmen">Freshmen</option>

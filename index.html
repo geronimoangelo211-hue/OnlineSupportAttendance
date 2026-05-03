@@ -272,7 +272,18 @@
                                 <h1 style="margin: 0; color: var(--accent); white-space: nowrap;">Live Attendance</h1>
                                 <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 13px; white-space: nowrap;">Monitor today's scheduled students and real-time logs.</p>
                             </div>
-                            <input type="text" id="search-attendance-global" placeholder="Search logs by Name or ID..." onkeyup="handleGlobalSearch()" style="margin: 0; width: 100%; max-width: 350px; padding: 10px 15px; font-size: 14px;">
+                            
+                            <!-- UPDATED: Sort Dropdown added to Search Bar -->
+                            <div style="display: flex; gap: 10px; width: 100%; max-width: 500px;">
+                                <input type="text" id="search-attendance-global" placeholder="Search logs by Name or ID..." onkeyup="handleGlobalSearch()" style="margin: 0; flex: 1; padding: 10px 15px; font-size: 14px;">
+                                <select id="sort-attendance-global" onchange="handleGlobalSearch()" style="margin: 0; width: 150px; font-size: 13px;">
+                                    <option value="NAME_ASC">Name (A-Z)</option>
+                                    <option value="NAME_DESC">Name (Z-A)</option>
+                                    <option value="CLASS_FRESH">Freshmen First</option>
+                                    <option value="CLASS_UPPER">UpperClass First</option>
+                                    <option value="ID_ASC">ID (Lowest)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     
@@ -291,6 +302,7 @@
                                         <thead>
                                             <tr>
                                                 <th>Name</th>
+                                                <th>Tags</th>
                                                 <th>ID Number</th>
                                                 <th>Reports</th> 
                                             </tr>
@@ -401,12 +413,14 @@
                             <option value="ASSIGNED">Assigned Schedule Only</option>
                         </select>
 
+                        <!-- UPDATED: Sort Dropdown for Schedules -->
                         <select id="sort-schedule" onchange="renderSchedule()" style="margin: 0; width: auto; font-size: 13px;">
                             <option value="NAME_ASC">Sort: Name (A-Z)</option>
                             <option value="NAME_DESC">Sort: Name (Z-A)</option>
-                            <option value="ID_ASC">Sort: ID (Lowest)</option>
-                            <option value="ID_DESC">Sort: ID (Highest)</option>
+                            <option value="CLASS_FRESH">Sort: Freshmen First</option>
+                            <option value="CLASS_UPPER">Sort: UpperClass First</option>
                             <option value="TAG_ASC">Sort: Tag (A-Z)</option>
+                            <option value="ID_ASC">Sort: ID (Lowest)</option>
                         </select>
                     </div>
 
@@ -442,7 +456,6 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 15px;">
                             <h4 id="history-table-title" style="color: var(--accent); margin: 0; font-size: 1.1rem;">Logs</h4>
                             <div style="display: flex; gap: 10px;">
-                                <!-- TEXT UPDATED HERE TO EXEMPT ALL -->
                                 <button id="history-exempt-all-btn" style="background: rgba(102, 252, 241, 0.1); color: #66fcf1; border: 1px solid #66fcf1; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Exempt All</button>
                                 <button id="history-sheet-btn" style="background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid #22c55e; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Record Today Google Sheets</button>
                                 <button id="history-export-btn" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); border: 1px solid var(--accent); padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Export Excel</button>

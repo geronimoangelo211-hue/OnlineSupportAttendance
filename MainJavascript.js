@@ -50,7 +50,7 @@ async function toggleAttendanceState(elem) {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
+                'X-Admin-Key': ADMIN_SECRET_KEY
             },
             body: JSON.stringify({ isLocked: isClosed })
         });
@@ -106,7 +106,7 @@ function applyUIRestrictions() {
 }
 
 // ==========================================
-// GLOBAL WIPE SYNC LOGIC
+// SAFELY PULL FROM CLOUD (EVERYONE CAN DO THIS)
 // ==========================================
 async function pullFromCloud() {
     try {
@@ -116,13 +116,12 @@ async function pullFromCloud() {
             const localStudents = JSON.parse(localStorage.getItem('students')) || [];
 
             if (cloudStudents.length > 0) {
-                // IF THIS IS A GLOBAL WIPE TOMBSTONE FROM ANOTHER DEVICE, DELETE LOCAL MEMORY!
                 if (cloudStudents[0].id === 'SYS_WIPE_ALL') {
                     localStorage.setItem('students', JSON.stringify([]));
                 } else {
                     localStorage.setItem('students', JSON.stringify(cloudStudents));
                 }
-            } else if (localStudents.length > 0) {
+            } else if (localStudents.length > 0 && isAuthenticated()) {
                 await pushStudentsToCloud();
             }
         }
@@ -133,13 +132,12 @@ async function pullFromCloud() {
             const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
 
             if (cloudLogs.length > 0) {
-                // IF THIS IS A GLOBAL WIPE TOMBSTONE FROM ANOTHER DEVICE, DELETE LOCAL MEMORY!
                 if (cloudLogs[0].id === 'SYS_WIPE_ALL' || cloudLogs[0].id === 'SYS_WIPE_LOGS') {
                     localStorage.setItem('attendanceLogs', JSON.stringify([]));
                 } else {
                     localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
                 }
-            } else if (localLogs.length > 0) {
+            } else if (localLogs.length > 0 && isAuthenticated()) {
                 await pushLogsToCloud();
             }
         }
@@ -148,14 +146,18 @@ async function pullFromCloud() {
     }
 }
 
+// ==========================================
+// DANGEROUS OVERWRITE ZONES (STRICTLY ADMIN ONLY)
+// ==========================================
 async function pushStudentsToCloud() {
+    if (!isAuthenticated()) return; // BLOCKS STUDENTS FROM WIPING DATA
     const data = JSON.parse(localStorage.getItem('students')) || [];
     try {
         await fetch(`${API_BASE_URL}/students/sync`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
+                'X-Admin-Key': ADMIN_SECRET_KEY
             },
             body: JSON.stringify(data)
         });
@@ -163,13 +165,14 @@ async function pushStudentsToCloud() {
 }
 
 async function pushLogsToCloud() {
+    if (!isAuthenticated()) return; // BLOCKS STUDENTS FROM WIPING DATA
     const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     try {
         const response = await fetch(`${API_BASE_URL}/logs/sync`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
+                'X-Admin-Key': ADMIN_SECRET_KEY 
             },
             body: JSON.stringify(data)
         });
@@ -249,7 +252,7 @@ _studentsInit.forEach(s => {
         _needsSave = true;
     }
 });
-if (_needsSave) {
+if (_needsSave && isAuthenticated()) {
     localStorage.setItem('students', JSON.stringify(_studentsInit));
     pushStudentsToCloud();
 }
@@ -330,17 +333,20 @@ setInterval(async () => {
     await pullFromCloud(); 
     await checkBackendLockStatus(); 
     
-    if(!isBackendLocked) {
-        processPastShifts(); 
-    }
-    
-    if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-        renderStudents();
-        renderSchedule();
-        renderDashboardSummary();
-        renderLogs();
-        renderMainDashboard();
-        renderDutyToday();
+    // ONLY ADMINS DO BACKGROUND DATA PROCESSING
+    if (isAuthenticated()) {
+        if(!isBackendLocked) {
+            processPastShifts(); 
+        }
+        
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderStudents();
+            renderSchedule();
+            renderDashboardSummary();
+            renderLogs();
+            renderMainDashboard();
+            renderDutyToday();
+        }
     }
 }, 15000);
 
@@ -408,7 +414,7 @@ function processPastShifts() {
         });
     }
 
-    if (updated) {
+    if (updated && isAuthenticated()) {
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
         pushLogsToCloud(); 
         enforceHistoryLimit(); 
@@ -892,28 +898,43 @@ async function toggleStudentDay(id, day) {
     }
 }
 
+// ==========================================
+// SAFELY APPEND LOGS WITHOUT WIPING (FIXED)
+// ==========================================
 async function logAttendanceAction(student, action, endOfShiftDetails = null, overrideDateStr = null) {
     if(isBackendLocked) {
         alert("The system is currently locked. Attendance cannot be recorded.");
         return;
     }
 
-    await pullFromCloud(); 
-    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const shift = getShiftDateDetails();
     const dateStr = overrideDateStr || shift.dateStr;
     
-    logs.push({
-        name: student.name,
+    const newLog = {
+        name: student.name || 'Unknown',
         id: student.id,
         action: action,
         time: shift.realTimeStr,
         date: dateStr,
         details: endOfShiftDetails 
-    });
-    
+    };
+
+    try {
+        // APPEND SAFELY TO CLOUD DIRECTLY
+        // This ensures the student's phone doesn't wipe out other people's data
+        await fetch(`${API_BASE_URL}/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newLog)
+        });
+    } catch (e) {
+        console.error("Direct cloud append failed");
+    }
+
+    // Save locally
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    logs.push(newLog);
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-    await pushLogsToCloud();
 
     enforceHistoryLimit(); 
     
@@ -1140,7 +1161,6 @@ async function devClearLogs() {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
         localStorage.setItem('deletedDates', JSON.stringify([])); 
         
-        // Push the Tombstone log to alert other devices
         const wipeLog = [{ id: 'SYS_WIPE_LOGS', name: 'WIPED', action: 'WIPED', time: '', date: '', details: null }];
         try {
             await fetch(`${API_BASE_URL}/logs/sync`, {
@@ -1175,7 +1195,6 @@ async function factoryReset() {
         
         if (verificationText === "RESET EVERYTHING") {
             
-            // Send the Global Wipe 'Tombstone' to the cloud first
             const wipePayload = [{ id: 'SYS_WIPE_ALL', name: 'WIPED', classLevel: '', gcHandle: '', assignedDays: [] }];
             const wipeLog = [{ id: 'SYS_WIPE_ALL', name: 'WIPED', action: 'WIPED', time: '', date: '', details: null }];
 
@@ -1192,7 +1211,6 @@ async function factoryReset() {
                 });
             } catch(e) { console.error("Wipe push failed"); }
 
-            // Then clear the local memory
             localStorage.clear();
             sessionStorage.clear();
             
@@ -1205,9 +1223,6 @@ async function factoryReset() {
     }
 }
 
-// ==========================================
-// UPDATED TIME IN LOGIC: 12:01 PM DEADLINE
-// ==========================================
 async function handleTimeIn() {
     if (isBackendLocked) {
         showMessage('student-message', 'Access Denied: The system is locked.', 'error');
@@ -1274,13 +1289,11 @@ async function handleTimeIn() {
             return;
         }
 
-        // TIME IN CONDITIONS
         if (shift.hour < 5) {
             showMessage('student-message', 'Time In opens at 5:00 AM.', 'error');
             initSliderCaptcha();
             return;
         } else if (shift.hour > 12 || (shift.hour === 12 && shift.min >= 1)) {
-            // NEW: If time is 12:01 PM or later, reject Time In and mark No Attendance
             await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
             showMessage('student-message', 'Time In is closed. You are marked as No Attendance.', 'error');
         } else if (shift.hour > 8 || (shift.hour === 8 && shift.min >= 1)) { 
@@ -1494,14 +1507,13 @@ function renderStudents() {
     
     list.innerHTML = '';
     
-    // EXCLUDE SYSTEM WIPE TOMBSTONES FROM RENDERING
     let filteredStudents = students.filter(student => 
         student.id !== 'SYS_WIPE_ALL' && student.id !== 'SYS_CONFIG_X99' &&
-        ((student.name && student.name.toLowerCase().includes(query)) || 
+        (((student.name || '').toLowerCase().includes(query)) || 
         (student.id && String(student.id).toLowerCase().includes(query)))
     );
 
-    filteredStudents.sort((a, b) => a.name.localeCompare(b.name));
+    filteredStudents.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     filteredStudents.forEach(student => {
         const li = document.createElement('li');
         const safeId = String(student.id).replace(/'/g, "\\'"); 
@@ -1510,7 +1522,7 @@ function renderStudents() {
 
         li.innerHTML = `
             <div style="display: flex; flex-direction: column;">
-                <div style="display: flex; align-items: center; gap: 5px;"><span style="font-weight: bold; color: var(--text-main);">${student.name}</span> ${classTag} ${gcTag}</div>
+                <div style="display: flex; align-items: center; gap: 5px;"><span style="font-weight: bold; color: var(--text-main);">${student.name || 'Unknown'}</span> ${classTag} ${gcTag}</div>
                 <span style="font-size: 0.8rem; color: var(--text-muted);">ID: ${student.id}</span>
             </div>
             <div style="display: flex; gap: 5px;">
@@ -1717,7 +1729,6 @@ function renderLogs() {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    // EXCLUDE GHOSTS
     const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const tbody = document.getElementById('attendance-logs-body');
     
@@ -1744,7 +1755,7 @@ function renderLogs() {
         
         return log.date === todayStr &&
                isScheduledToday &&
-               (log.name.toLowerCase().includes(query) || String(log.id).toLowerCase().includes(query));
+               ((log.name || '').toLowerCase().includes(query) || String(log.id).toLowerCase().includes(query));
     });
 
     filteredLogs.sort((a, b) => {
@@ -1790,7 +1801,7 @@ function renderLogs() {
         }
 
         tr.innerHTML = `
-            <td>${log.name}</td>
+            <td>${log.name || 'Unknown'}</td>
             <td>${log.id}</td>
             <td style="color: ${statusColor}; font-weight: bold;">${log.action}</td>
             <td>${log.time}</td>
@@ -1818,7 +1829,7 @@ function renderDutyToday() {
     const todayStr = shift.dateStr;
 
     const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
-    scheduledToday.sort((a, b) => a.name.localeCompare(b.name));
+    scheduledToday.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     dutyList.innerHTML = '';
 
@@ -1843,7 +1854,7 @@ function renderDutyToday() {
         card.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="width: 10px; height: 10px; border-radius: 50%; background-color: ${statusDot}; flex-shrink: 0;"></div>
-                <strong style="color: var(--text-main); font-size: 13px;">${student.name}</strong>
+                <strong style="color: var(--text-main); font-size: 13px;">${student.name || 'Unknown'}</strong>
             </div>
             <span style="font-size: 11px; color: var(--text-muted);">${student.gcHandle || ''}</span>
         `;
@@ -1935,7 +1946,7 @@ function exportToExcel(dateStr = null) {
             }
         }
 
-        data.push([student.name, student.id, student.classLevel || 'Freshmen', inText, outText, targetDate, gc, ann, post]);
+        data.push([student.name || 'Unknown', student.id, student.classLevel || 'Freshmen', inText, outText, targetDate, gc, ann, post]);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(data);
@@ -2056,7 +2067,7 @@ async function recordToGoogleSheets(dateStr) {
         }
 
         payload.push({
-            name: student.name,
+            name: student.name || 'Unknown',
             id: student.id,
             classLevel: student.classLevel || 'Freshmen', 
             timeIn: inText,
@@ -2205,10 +2216,10 @@ function renderSchedule() {
     const dayLabels = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'];
     
     let filteredStudents = validStudents.filter(student => 
-        (student.name && student.name.toLowerCase().includes(query)) || 
+        ((student.name || '').toLowerCase().includes(query)) || 
         (student.id && String(student.id).toLowerCase().includes(query)) ||
-        (student.gcHandle && student.gcHandle.toLowerCase().includes(query)) ||
-        (student.classLevel && student.classLevel.toLowerCase().includes(query))
+        ((student.gcHandle || '').toLowerCase().includes(query)) ||
+        ((student.classLevel || '').toLowerCase().includes(query))
     );
 
     if (filterVal === 'UNASSIGNED') {
@@ -2261,7 +2272,7 @@ function renderSchedule() {
         let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
         tr.innerHTML = `
-            <td style="white-space: normal;"><strong style="color: var(--text-main);">${student.name}</strong></td>
+            <td style="white-space: normal;"><strong style="color: var(--text-main);">${student.name || 'Unknown'}</strong></td>
             <td style="white-space: normal;">${classTagHtml}${gcTagHtml}</td>
             <td style="white-space: normal; color: var(--text-muted);">${student.id}</td>
             <td style="white-space: normal; width: 100%;">
@@ -2400,7 +2411,7 @@ function renderHistoryTable(dateStr) {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${name}</td>
+            <td>${name || 'Unknown'}</td>
             <td>${id}</td>
             <td style="font-weight: bold;">${inText}</td>
             <td style="font-weight: bold;">${outText}</td>
@@ -2665,7 +2676,7 @@ function renderMainDashboard() {
                 if (!recentLog) {
                     deadCount++;
                     deadStudentsList.innerHTML += `<div style="padding: 12px 10px; border-bottom: 1px solid #2d313c; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-                        <span style="color: var(--text-main); font-size: 13px;">${student.name}</span> 
+                        <span style="color: var(--text-main); font-size: 13px;">${student.name || 'Unknown'}</span> 
                         <span style="color:var(--error); font-weight: bold; font-size: 10px;">INACTIVE</span>
                     </div>`;
                 }
@@ -2707,7 +2718,7 @@ function renderMainDashboard() {
             perfRate += bonus;
             if (perfRate > 100) perfRate = 100;
 
-            perfList.push({ name: student.name, id: student.id, rate: Math.round(perfRate) });
+            perfList.push({ name: student.name || 'Unknown', id: student.id, rate: Math.round(perfRate) });
         });
 
         perfList.sort((a, b) => b.rate - a.rate);
@@ -2769,7 +2780,7 @@ function renderDashboardSummary() {
     const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
 
     let filteredStudents = scheduledToday.filter(student => 
-        student.name.toLowerCase().includes(query) || 
+        (student.name || '').toLowerCase().includes(query) || 
         String(student.id).toLowerCase().includes(query)
     );
 
@@ -2818,7 +2829,7 @@ function renderDashboardSummary() {
         const tr = document.createElement('tr');
         tr.style.backgroundColor = rowBg;
         tr.innerHTML = `
-            <td><strong style="color: var(--text-main);">${student.name}</strong></td>
+            <td><strong style="color: var(--text-main);">${student.name || 'Unknown'}</strong></td>
             <td>${classTagHtml}</td>
             <td style="color: var(--text-muted);">${student.id}</td>
             <td>
@@ -2880,7 +2891,7 @@ function viewPerformance(idNum) {
     const perfOutTime = document.getElementById('perf-out-time');
     const perfLateOut = document.getElementById('perf-late-out');
     
-    if(perfStudentName) perfStudentName.textContent = student.name;
+    if(perfStudentName) perfStudentName.textContent = student.name || 'Unknown';
     if(perfTotalPresent) perfTotalPresent.textContent = totalPresent;
     if(perfOnTime) perfOnTime.textContent = onTimeIn;
     if(perfLateIn) perfLateIn.textContent = lateIn;
@@ -2933,7 +2944,7 @@ function viewTodayShift(idNum, dateStr) {
     if (!timeOutLog) return; 
     
     const tsName = document.getElementById('ts-name');
-    if(tsName) tsName.textContent = timeOutLog.name;
+    if(tsName) tsName.textContent = timeOutLog.name || 'Unknown';
     
     const inEl = document.getElementById('ts-time-in');
     if(inEl) {
@@ -3317,7 +3328,7 @@ function checkDeviceLock() {
                 idInput.disabled = true;
                 btnIn.style.display = 'none';
                 lockMsg.style.display = 'block';
-                lockMsg.innerHTML = `🔒 Device locked to <strong>${student.name}</strong>.<br><span style="font-size: 0.75rem; color: var(--text-muted);">You must Time Out to free this device.</span>`;
+                lockMsg.innerHTML = `🔒 Device locked to <strong>${student.name || 'Unknown'}</strong>.<br><span style="font-size: 0.75rem; color: var(--text-muted);">You must Time Out to free this device.</span>`;
                 return; 
             }
         }

@@ -442,8 +442,10 @@ async function loginAdmin(event) {
         }
 
         if (data.success) {
-            const tokenPayload = btoa(JSON.stringify({ valid: true, timestamp: Date.now() }));
+            const userRole = data.role || 'ADMIN'; 
+            const tokenPayload = btoa(JSON.stringify({ valid: true, timestamp: Date.now(), role: userRole }));
             sessionStorage.setItem('_auth_tkn_x92', tokenPayload);
+            
             switchView('admin-dashboard-view');
             
             document.getElementById('admin-user').value = '';
@@ -470,6 +472,50 @@ async function loginAdmin(event) {
         loginBtn.textContent = "Login";
         loginBtn.disabled = false;
         loginBtn.style.opacity = "1";
+    }
+}
+
+function applyVisitorMode() {
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    if (!tk) return;
+    
+    let userRole = 'ADMIN';
+    try { 
+        userRole = JSON.parse(atob(tk)).role || 'ADMIN'; 
+    } catch(e) {}
+
+    if (userRole === 'VISITOR') {
+        // 1. Hide Remove, Delete (X), and Edit Buttons
+        document.querySelectorAll('.remove-btn, .history-trash-btn, button[onclick^="openEditStudentModal"]').forEach(btn => {
+            btn.style.display = 'none';
+        });
+
+        // 2. Hide the "Create Student Support" button
+        const createStudentBtn = document.querySelector('button[onclick="createStudent()"]');
+        if (createStudentBtn) createStudentBtn.style.display = 'none';
+
+        // 3. Hide Google Sheets & Export Excel Buttons
+        const sheetBtn = document.getElementById('history-sheet-btn');
+        const exportBtn = document.getElementById('history-export-btn');
+        if (sheetBtn) sheetBtn.style.display = 'none';
+        if (exportBtn) exportBtn.style.display = 'none';
+
+        const exemptAllBtn = document.getElementById('history-exempt-all-btn');
+        if (exemptAllBtn) exemptAllBtn.style.display = 'none';
+        
+        document.querySelectorAll('input[onchange^="toggleExempt"]').forEach(chk => {
+            chk.disabled = true; 
+            chk.style.cursor = 'not-allowed';
+        });
+
+        const settingsSection = document.getElementById('sec-settings');
+        if (settingsSection) {
+            settingsSection.querySelectorAll('button').forEach(btn => {
+                btn.disabled = true;
+                btn.style.opacity = '0.3';
+                btn.style.cursor = 'not-allowed';
+            });
+        }
     }
 }
 
@@ -1691,10 +1737,16 @@ function switchAdminSection(sectionId, navElement) {
 
     sessionStorage.setItem('currentAdminSec', sectionId);
 
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    let userRole = 'ADMIN';
+    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+
     if (sectionId === 'sec-settings') {
-        settingsClickCount++;
-        if (settingsClickCount >= 20 && document.getElementById('dev-tools-panel') && document.getElementById('dev-tools-panel').style.display !== 'flex') {
-            openDevPasswordModal();
+        if (userRole !== 'VISITOR') {
+            settingsClickCount++;
+            if (settingsClickCount >= 20 && document.getElementById('dev-tools-panel') && document.getElementById('dev-tools-panel').style.display !== 'flex') {
+                openDevPasswordModal();
+            }
         }
         fetchAdminAccounts(); 
         generateAdminMathCaptcha();

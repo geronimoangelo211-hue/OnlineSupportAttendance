@@ -5,11 +5,9 @@ const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
 
-// Global Time Travel State synced with Backend
 let globalTimeOffset = 0;
 let globalDayOverride = "";
 
-// Start ticking the simulated clock globally
 setInterval(() => {
     if (globalTimeOffset !== 0) {
         document.getElementById('simulated-clock-container').style.display = 'block';
@@ -38,14 +36,28 @@ async function checkBackendLockStatus() {
         if (response.ok) {
             const data = await response.json();
             
-            // Sync Time Travel offsets from Backend
             globalTimeOffset = data.timeOffset || 0;
             globalDayOverride = data.dayOverride || "";
 
-            if (isBackendLocked !== data.isLocked) {
-                isBackendLocked = data.isLocked;
-                localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
+            // FIX: ADMIN LOCK ENFORCER
+            // If the server slept and woke up "Unlocked", but the Admin knows it should be "Locked", enforce it!
+            const localLockState = localStorage.getItem('attendance_closed') === 'true';
+            
+            if (isAuthenticated() && localLockState && !data.isLocked) {
+                console.warn("Server amnesia detected. Enforcing Lock State...");
+                await fetch(`${API_BASE_URL}/config/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+                    body: JSON.stringify({ isLocked: true })
+                });
+                isBackendLocked = true;
                 applyUIRestrictions();
+            } else {
+                if (isBackendLocked !== data.isLocked) {
+                    isBackendLocked = data.isLocked;
+                    localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
+                    applyUIRestrictions();
+                }
             }
         }
     } catch (err) {
@@ -305,12 +317,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAccentColor();
     document.body.classList.add('portal-mode');
 
+    // Make sure locks run properly on load
     checkBackendLockStatus().then(() => {
         applyUIRestrictions();
         initDevUI();
     });
     
-    checkDeviceLock();
+    // FIX: RACE CONDITION - Do not check device lock yet!
+    // Wait until pullFromCloud finishes down below.
     setTimeout(initSliderCaptcha, 50);
 
     isIncognito().then(isPrivate => {
@@ -362,7 +376,11 @@ document.addEventListener('DOMContentLoaded', () => {
         switchAdminSection(savedSec, targetNav);
     }
 
+    // FIX: RACE CONDITION RESOLVED
+    // Wait until the logs are fully downloaded before checking the device lock
     pullFromCloud().then(() => {
+        checkDeviceLock(); 
+        
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderStudents();
             renderLogs();
@@ -377,6 +395,9 @@ setInterval(async () => {
     await pullFromCloud(); 
     await checkBackendLockStatus(); 
     
+    // Check lock again just in case a new log unlocked it dynamically
+    checkDeviceLock(); 
+
     if (isAuthenticated()) {
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderStudents();
@@ -1505,10 +1526,12 @@ async function switchView(viewId) {
             const incognito = document.getElementById('incognito-screen');
             if(incognito) incognito.style.display = 'none';
             if(form) form.style.display = 'block';
+            
+            // Re-eval lock ONLY after UI setup
             checkDeviceLock(); 
             setTimeout(initSliderCaptcha, 50); 
         }
-        checkSystemLockStatus(); 
+        checkBackendLockStatus(); 
     }
     
     generateAdminCaptcha();
@@ -1525,7 +1548,7 @@ async function switchView(viewId) {
         renderLogs();
         renderMainDashboard(); 
         renderDutyToday(); 
-        checkSystemLockStatus(); 
+        checkBackendLockStatus(); 
     } else {
         document.body.classList.add('portal-mode'); 
         const mh = document.getElementById('main-header');
@@ -1579,7 +1602,6 @@ function switchAdminSection(sectionId, navElement) {
             openDevPasswordModal();
         }
         fetchAdminAccounts(); 
-        
         checkBackendLockStatus(); 
     } else {
         settingsClickCount = 0; 
@@ -1749,7 +1771,7 @@ function renderDutyToday() {
         } else if (hasTimedIn) {
             statusDot = '#22c55e'; 
         } else {
-            statusDot = 'var(--error)'; // Show red if they haven't timed in yet!
+            statusDot = 'var(--error)'; 
         }
 
         const card = document.createElement('div');
@@ -2024,7 +2046,6 @@ function showMessage(elementId, text, type) {
 }
 
 function getPHT() {
-    // Calculates a ticking simulated clock based on the backend globalTimeOffset
     return new Date(Date.now() + globalTimeOffset);
 }
 
@@ -2254,7 +2275,7 @@ async function renderHistoryTable(dateStr) {
     
     const tbody = document.getElementById('history-logs-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs from secure server...</td></tr>';
 
     const searchInput = document.getElementById('search-history-logs');
     const query = searchInput ? searchInput.value.toLowerCase() : '';
@@ -2280,17 +2301,19 @@ async function renderHistoryTable(dateStr) {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const targetDayStr = dayNames[targetDateObj.getDay()];
 
-    let studentsToRender = validStudents.filter(student => {
+    const studentsToRender = validStudents.filter(student => {
         const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
         const hasLogs = dayLogs.some(l => String(l.id) === String(student.id));
         return isScheduled || hasLogs;
     });
 
     if (query) {
-        studentsToRender = studentsToRender.filter(s => 
+        const filtered = studentsToRender.filter(s => 
             (s.name || '').toLowerCase().includes(query) || 
             String(s.id).toLowerCase().includes(query)
         );
+        studentsToRender.length = 0;
+        studentsToRender.push(...filtered);
     }
 
     studentsToRender.sort((a, b) => {
@@ -2321,7 +2344,6 @@ async function renderHistoryTable(dateStr) {
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
         const isExempted = studentLogs.some(l => l.action.includes('Exempted'));
 
-        // DEFAULT SHOW ABSENT FOR SCHEDULED STUDENTS
         let inText = '<span style="color: var(--error);">Absent</span>';
         let outText = '<span style="color: var(--error);">Absent</span>';
         let gc = '-';
@@ -2366,10 +2388,7 @@ async function renderHistoryTable(dateStr) {
     });
 }
 
-function initDevUI() {
-    // Only used to populate UI fields if backend matches
-    // But actual time travel drives off the backend now
-}
+function initDevUI() {}
 
 async function applyDevSettings() {
     const dateVal = document.getElementById('dev-date').value;

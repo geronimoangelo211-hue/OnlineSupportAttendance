@@ -190,7 +190,13 @@
                     <div class="admin-nav-item" onclick="switchAdminSection('sec-data', this)">Students Data</div>
                     <div class="admin-nav-item" onclick="switchAdminSection('sec-schedule', this)">Students Schedule</div>
                     <div class="admin-nav-item" onclick="switchAdminSection('sec-history', this)">History</div>
-                    <div class="admin-nav-item" onclick="switchAdminSection('sec-settings', this)">Settings</div>
+                    <div class="admin-nav-item" id="nav-settings-btn" onclick="switchAdminSection('sec-settings', this)">Settings</div>
+                    
+                    <div id="admin-user-display" style="display: flex; flex-direction: column; justify-content: center; align-items: flex-end; margin-right: 15px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 15px;">
+                        <span id="display-username" style="color: var(--accent); font-weight: bold; font-size: 13px; line-height: 1.2;">Admin</span>
+                        <span id="display-role" style="color: var(--text-muted); font-size: 10px; line-height: 1.2; text-transform: uppercase;">Role</span>
+                    </div>
+
                     <div class="admin-nav-item logout-btn" onclick="logoutAdmin()">Logout</div>
                 </div>
             </div>

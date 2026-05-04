@@ -3446,3 +3446,34 @@ async function isIncognito() {
         }
     });
 }
+
+function enforceVisitorModeConstraints(currentUserRole) {
+    
+    if (currentUserRole === 'VISITOR') {
+        
+        const settingsNavBtn = document.getElementById('nav-settings-btn');
+        if (settingsNavBtn) {
+            settingsNavBtn.style.display = 'none';
+        }
+        
+        const removeButtons = document.querySelectorAll('.remove-btn');
+        removeButtons.forEach(btn => {
+            btn.style.display = 'none';
+        });
+        
+        const historyTrashButtons = document.querySelectorAll('.history-trash-btn');
+        historyTrashButtons.forEach(btn => {
+            btn.style.display = 'none';
+        });
+
+        const exemptAllBtn = document.getElementById('history-exempt-all-btn');
+        if (exemptAllBtn) {
+            exemptAllBtn.style.display = 'none';
+        }
+        
+        const editButtons = document.querySelectorAll('.edit-btn');
+        editButtons.forEach(btn => {
+             btn.style.display = 'none';
+        });
+    }
+}

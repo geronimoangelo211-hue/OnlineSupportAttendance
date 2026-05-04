@@ -68,6 +68,16 @@ function applyVisitorMode() {
             chk.style.cursor = 'not-allowed';
         });
 
+        document.querySelectorAll('.day-toggle').forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+            btn.style.pointerEvents = 'none'; 
+        });
+
+        const createDateCardBtn = document.querySelector('button[onclick="createManualHistoryDate()"]');
+        if (createDateCardBtn) createDateCardBtn.style.display = 'none';
+
         const settingsSection = document.getElementById('sec-settings');
         if (settingsSection) {
             settingsSection.querySelectorAll('button').forEach(btn => {

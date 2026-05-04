@@ -1,3 +1,6 @@
+console.log("%cSTOP!", "color: red; font-size: 50px; font-weight: bold; font-family: sans-serif; text-shadow: 2px 2px 0 #000;");
+console.log("%cBawal ka dito panget", "color: white; background: red; font-size: 16px; padding: 5px 10px; border-radius: 5px;");
+
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
@@ -1056,6 +1059,9 @@ async function applyExempt(type) {
     const s = students.find(x => String(x.id) === String(pendingExemptId));
     
     if (s) {
+        const existingInLog = logs.find(l => String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Time In') && !l.action.includes('Exempted'));
+        const existingOutLog = logs.find(l => String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Time Out') && !l.action.includes('Exempted'));
+
         if (type === 'IN' || type === 'BOTH') {
             logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Time In')));
             logs.push({
@@ -1064,7 +1070,8 @@ async function applyExempt(type) {
                 action: 'Time In (Exempted)',
                 time: 'Exempted',
                 date: pendingExemptDate,
-                details: null
+                details: null,
+                originalLog: existingInLog || null
             });
         }
         
@@ -1076,7 +1083,8 @@ async function applyExempt(type) {
                 action: 'Time Out (Exempted)',
                 time: 'Exempted',
                 date: pendingExemptDate,
-                details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
+                originalLog: existingOutLog || null
             });
         }
 
@@ -1099,7 +1107,12 @@ async function removeExemptions(idNum, dateStr) {
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
+    const exemptLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted'));
     logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted')));
+    
+    exemptLogs.forEach(el => {
+        if (el.originalLog) logs.push(el.originalLog);
+    });
     
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     await pushLogsToCloud();
@@ -1126,6 +1139,9 @@ async function exemptAllForDate(dateStr) {
 
         scheduledStudents.forEach(s => {
             const idNum = s.id;
+            const existingInLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Time In') && !l.action.includes('Exempted'));
+            const existingOutLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Time Out') && !l.action.includes('Exempted'));
+
             logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr));
 
             logs.push({
@@ -1134,7 +1150,8 @@ async function exemptAllForDate(dateStr) {
                 action: 'Time In (Exempted)',
                 time: 'Exempted',
                 date: dateStr,
-                details: null
+                details: null,
+                originalLog: existingInLog || null
             });
 
             logs.push({
@@ -1143,7 +1160,8 @@ async function exemptAllForDate(dateStr) {
                 action: 'Time Out (Exempted)',
                 time: 'Exempted',
                 date: dateStr,
-                details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
+                originalLog: existingOutLog || null
             });
         });
 
@@ -2725,56 +2743,56 @@ function renderMainDashboard() {
         const maxLineVal = 50; 
         const lineChartContainer = document.getElementById('dash-line-chart-container');
         if (lineChartContainer) {
-            let svgHTML = `<svg width="100%" height="100%" viewBox="-15 -20 270 140" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
+            let svgHTML = `<svg width="100%" height="100%" viewBox="-40 -20 1080 260" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
             
             for(let val = 0; val <= 50; val += 10) {
-                let yLine = 100 - ((val / maxLineVal) * 100);
-                svgHTML += `<line x1="0" y1="${yLine}" x2="240" y2="${yLine}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />`;
-                svgHTML += `<text x="-5" y="${yLine + 3}" fill="var(--text-muted)" font-size="8" text-anchor="end">${val}</text>`;
+                let yLine = 200 - ((val / maxLineVal) * 200);
+                svgHTML += `<line x1="0" y1="${yLine}" x2="1000" y2="${yLine}" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" />`;
+                svgHTML += `<text x="-15" y="${yLine + 5}" fill="var(--text-muted)" font-size="14" font-weight="bold" text-anchor="end">${val}</text>`;
             }
 
             let inPoints = [];
             hourlyInCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
+                let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
-                let y = 100 - ((c / maxLineVal) * 100);
+                let y = 200 - ((c / maxLineVal) * 200);
                 inPoints.push(`${x},${y}`);
             });
 
             let outPoints = [];
             hourlyOutCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
+                let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
-                let y = 100 - ((c / maxLineVal) * 100);
+                let y = 200 - ((c / maxLineVal) * 200);
                 outPoints.push(`${x},${y}`);
             });
             
-            svgHTML += `<polyline points="${outPoints.join(' ')}" fill="none" stroke="var(--error)" stroke-width="2.5" />`;
-            svgHTML += `<polyline points="${inPoints.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" />`;
+            svgHTML += `<polyline points="${outPoints.join(' ')}" fill="none" stroke="var(--error)" stroke-width="3.5" />`;
+            svgHTML += `<polyline points="${inPoints.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3.5" />`;
             
             hourlyOutCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
+                let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
-                let y = 100 - ((c / maxLineVal) * 100);
-                svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--error)" stroke-width="1.5" />`;
+                let y = 200 - ((c / maxLineVal) * 200);
+                svgHTML += `<circle cx="${x}" cy="${y}" r="6" fill="#1e2128" stroke="var(--error)" stroke-width="2.5" />`;
                 if (count > 0) {
-                    svgHTML += `<text x="${x}" y="${y + 12}" fill="var(--error)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
+                    svgHTML += `<text x="${x}" y="${y + 20}" fill="var(--error)" font-size="12" text-anchor="middle" font-weight="bold">${count}</text>`;
                 }
             });
 
             hourlyInCounts.forEach((count, i) => {
-                let x = (i / 23) * 240;
+                let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
-                let y = 100 - ((c / maxLineVal) * 100);
-                svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--accent)" stroke-width="1.5" />`;
+                let y = 200 - ((c / maxLineVal) * 200);
+                svgHTML += `<circle cx="${x}" cy="${y}" r="6" fill="#1e2128" stroke="var(--accent)" stroke-width="2.5" />`;
                 if (count > 0) {
-                    svgHTML += `<text x="${x}" y="${y - 8}" fill="var(--accent)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
+                    svgHTML += `<text x="${x}" y="${y - 12}" fill="var(--accent)" font-size="12" text-anchor="middle" font-weight="bold">${count}</text>`;
                 }
             });
 
             svgHTML += `</svg>`;
             
-            let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 10px; color: var(--text-muted); font-size: 9px; padding: 0;">`;
+            let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 15px; color: var(--text-muted); font-size: 11px; padding: 0;">`;
             const lineLabels = ['12a','1a','2a','3a','4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p'];
             lineLabels.forEach(lbl => {
                 labelsHTML += `<span style="flex: 1; text-align: center;">${lbl}</span>`;
@@ -2964,6 +2982,7 @@ function renderDashboardSummary() {
         `;
         tbody.appendChild(tr);
     });
+    applyVisitorMode();
 }
 
 function viewPerformance(idNum) {

@@ -39,12 +39,9 @@ async function checkBackendLockStatus() {
             globalTimeOffset = data.timeOffset || 0;
             globalDayOverride = data.dayOverride || "";
 
-            // FIX: ADMIN LOCK ENFORCER
-            // If the server slept and woke up "Unlocked", but the Admin knows it should be "Locked", enforce it!
             const localLockState = localStorage.getItem('attendance_closed') === 'true';
             
             if (isAuthenticated() && localLockState && !data.isLocked) {
-                console.warn("Server amnesia detected. Enforcing Lock State...");
                 await fetch(`${API_BASE_URL}/config/toggle`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
@@ -61,7 +58,6 @@ async function checkBackendLockStatus() {
             }
         }
     } catch (err) {
-        console.warn("Could not reach backend for lock status.");
     }
 }
 
@@ -94,7 +90,6 @@ async function toggleAttendanceState(elem) {
             alert("Failed to sync lock state with server. Check security key.");
         }
     } catch (err) {
-        console.error("Lock Sync Error:", err);
         elem.checked = !isClosed;
     }
 }
@@ -210,7 +205,6 @@ async function pullFromCloud() {
             }
         }
     } catch (err) {
-        console.warn("Cloud pull delayed.");
     }
     isSyncing = false;
 }
@@ -224,7 +218,7 @@ async function pushStudentsToCloud() {
             headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
             body: JSON.stringify(data)
         });
-    } catch (err) { console.error("Cloud Student Sync Failed"); }
+    } catch (err) {}
 }
 
 async function pushLogsToCloud() {
@@ -241,7 +235,7 @@ async function pushLogsToCloud() {
             localStorage.setItem('attendance_closed', 'true');
             applyUIRestrictions();
         }
-    } catch (err) { console.error("Cloud Log Sync Failed"); }
+    } catch (err) {}
 }
 
 let pendingTimeOutStudent = null;
@@ -317,14 +311,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAccentColor();
     document.body.classList.add('portal-mode');
 
-    // Make sure locks run properly on load
     checkBackendLockStatus().then(() => {
         applyUIRestrictions();
         initDevUI();
     });
     
-    // FIX: RACE CONDITION - Do not check device lock yet!
-    // Wait until pullFromCloud finishes down below.
     setTimeout(initSliderCaptcha, 50);
 
     isIncognito().then(isPrivate => {
@@ -376,8 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
         switchAdminSection(savedSec, targetNav);
     }
 
-    // FIX: RACE CONDITION RESOLVED
-    // Wait until the logs are fully downloaded before checking the device lock
     pullFromCloud().then(() => {
         checkDeviceLock(); 
         
@@ -395,7 +384,6 @@ setInterval(async () => {
     await pullFromCloud(); 
     await checkBackendLockStatus(); 
     
-    // Check lock again just in case a new log unlocked it dynamically
     checkDeviceLock(); 
 
     if (isAuthenticated()) {
@@ -406,6 +394,13 @@ setInterval(async () => {
             renderLogs();
             renderMainDashboard();
             renderDutyToday();
+            
+            const secHist = document.getElementById('sec-history');
+            if (secHist && secHist.classList.contains('active')) {
+                if (document.getElementById('history-table-container').style.display === 'none') {
+                    renderHistoryView();
+                }
+            }
         }
     }
 }, 15000);
@@ -874,9 +869,7 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newLog)
         });
-    } catch (e) {
-        console.error("Direct cloud append failed");
-    }
+    } catch (e) {}
 
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     logs.push(newLog);
@@ -887,6 +880,13 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
         renderMainDashboard();
         renderDashboardSummary();
         renderDutyToday();
+        
+        const secHist = document.getElementById('sec-history');
+        if (secHist && secHist.classList.contains('active')) {
+            if (document.getElementById('history-table-container').style.display === 'none') {
+                renderHistoryView();
+            }
+        }
     }
 }
 
@@ -1090,6 +1090,45 @@ async function exemptAllForDate(dateStr) {
     }
 }
 
+async function createManualHistoryDate() {
+    if(!isAuthenticated()) return;
+    const dateInput = prompt("Enter the date for the new History Card (e.g., 5/4/2026):");
+    if (!dateInput || dateInput.trim() === "") return;
+
+    const dateStr = dateInput.trim();
+    
+    await pullFromCloud();
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    
+    if (logs.some(l => l.date === dateStr && l.id !== 'SYS_DELETED_DATE')) {
+        alert("A card for this date already exists.");
+        return;
+    }
+
+    const initLog = {
+        name: 'SYSTEM_INIT',
+        id: 'SYS_INIT_DATE',
+        action: 'INIT',
+        time: '00:00 AM',
+        date: dateStr,
+        details: null
+    };
+
+    logs.push(initLog);
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    
+    try {
+        await fetch(`${API_BASE_URL}/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(initLog)
+        });
+    } catch(e) {}
+
+    renderHistoryView();
+    alert(`Date Card for ${dateStr} created successfully!`);
+}
+
 async function devClearLogs() {
     if(!isAuthenticated()) return;
     if(confirm("This will permanently delete ALL attendance logs from the cloud database ACROSS ALL DEVICES. Continue?")) {
@@ -1101,7 +1140,7 @@ async function devClearLogs() {
                 method: 'DELETE',
                 headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
             });
-        } catch(e) { console.error("Cloud wipe failed"); }
+        } catch(e) {}
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderLogs();
@@ -1131,7 +1170,7 @@ async function factoryReset() {
                     method: 'DELETE',
                     headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
                 });
-            } catch(e) { console.error("Server-side wipe failed", e); }
+            } catch(e) {}
 
             localStorage.clear();
             sessionStorage.clear();
@@ -1527,7 +1566,6 @@ async function switchView(viewId) {
             if(incognito) incognito.style.display = 'none';
             if(form) form.style.display = 'block';
             
-            // Re-eval lock ONLY after UI setup
             checkDeviceLock(); 
             setTimeout(initSliderCaptcha, 50); 
         }
@@ -2289,7 +2327,6 @@ async function renderHistoryTable(dateStr) {
             throw new Error("Server API Error");
         }
     } catch (err) {
-        console.warn("Backend fetch failed. Using local storage fallback.");
         const allLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         dayLogs = allLogs.filter(l => l.date === dateStr);
     }
@@ -2336,6 +2373,8 @@ async function renderHistoryTable(dateStr) {
 
     studentsToRender.forEach(student => {
         const id = student.id;
+        if (id === 'SYS_DELETED_DATE' || id === 'SYS_CONFIG_X99' || id === 'SYS_WIPE_ALL' || id === 'SYS_WIPE_LOGS' || id === 'SYS_INIT_DATE') return;
+
         const name = student.name || 'Unknown';
         const studentLogs = dayLogs.filter(l => String(l.id) === String(id));
         

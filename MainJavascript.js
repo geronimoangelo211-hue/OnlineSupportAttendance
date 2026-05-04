@@ -1,12 +1,19 @@
-console.log("%cSTOP!", "color: red; font-size: 50px; font-weight: bold; font-family: sans-serif; text-shadow: 2px 2px 0 #000;");
-console.log("%cBawal ka dito panget", "color: white; background: red; font-size: 16px; padding: 5px 10px; border-radius: 5px;");
-
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
 
 let globalTimeOffset = 0;
 let globalDayOverride = "";
+let adminMathAns = 0; 
+let pendingTimeOutStudent = null;
+let pendingTimeOutAction = null;
+let pendingTimeOutDate = null;
+let settingsClickCount = 0; 
+let pendingExemptId = null;
+let pendingExemptDate = null;
+let pendingExemptCheckbox = null;
+let isSyncing = false;
+let isBackendLocked = false; 
 
 setInterval(() => {
     if (globalTimeOffset !== 0) {
@@ -28,14 +35,56 @@ const isAuthenticated = function() {
     }
 };
 
-let isBackendLocked = false; 
+function applyVisitorMode() {
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    if (!tk) return;
+    
+    let userRole = 'ADMIN';
+    try { 
+        userRole = JSON.parse(atob(tk)).role || 'ADMIN'; 
+    } catch(e) {}
+
+    if (userRole === 'VISITOR') {
+        document.querySelectorAll('.remove-btn, .history-trash-btn, button[onclick^="openEditStudentModal"]').forEach(btn => {
+            btn.style.display = 'none';
+        });
+
+        const createStudentBtn = document.querySelector('button[onclick="createStudent()"]');
+        if (createStudentBtn) createStudentBtn.style.display = 'none';
+
+        const sheetBtn = document.getElementById('history-sheet-btn');
+        const exportBtn = document.getElementById('history-export-btn');
+        if (sheetBtn) sheetBtn.style.display = 'none';
+        if (exportBtn) exportBtn.style.display = 'none';
+
+        const exemptAllBtn = document.getElementById('history-exempt-all-btn');
+        if (exemptAllBtn) exemptAllBtn.style.display = 'none';
+        
+        document.querySelectorAll('input[onchange^="toggleExempt"]').forEach(chk => {
+            chk.disabled = true;
+            chk.style.cursor = 'not-allowed';
+        });
+
+        const settingsSection = document.getElementById('sec-settings');
+        if (settingsSection) {
+            settingsSection.querySelectorAll('button').forEach(btn => {
+                btn.disabled = true;
+                btn.style.opacity = '0.3';
+                btn.style.cursor = 'not-allowed';
+            });
+            settingsSection.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+                chk.disabled = true;
+                chk.style.cursor = 'not-allowed';
+            });
+        }
+    }
+}
 
 async function checkBackendLockStatus() {
     try {
         const response = await fetch(`${API_BASE_URL}/config/status`, { cache: 'no-store' });
         if (response.ok) {
             const data = await response.json();
-            
             globalTimeOffset = data.timeOffset || 0;
             globalDayOverride = data.dayOverride || "";
 
@@ -57,11 +106,20 @@ async function checkBackendLockStatus() {
                 }
             }
         }
-    } catch (err) {
-    }
+    } catch (err) {}
 }
 
 async function toggleAttendanceState(elem) {
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    let userRole = 'ADMIN';
+    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+    
+    if (userRole === 'VISITOR') {
+        elem.checked = !elem.checked;
+        alert("Access Denied: View Only Mode.");
+        return;
+    }
+
     const isClosed = elem.checked;
     const knob = document.getElementById('sys-toggle-knob');
     if(knob) {
@@ -160,7 +218,6 @@ window.resolveSync = async function(action) {
     }
 }
 
-let isSyncing = false;
 async function pullFromCloud() {
     if (isSyncing) return;
     isSyncing = true;
@@ -204,8 +261,7 @@ async function pullFromCloud() {
                 }
             }
         }
-    } catch (err) {
-    }
+    } catch (err) {}
     isSyncing = false;
 }
 
@@ -237,15 +293,6 @@ async function pushLogsToCloud() {
         }
     } catch (err) {}
 }
-
-let pendingTimeOutStudent = null;
-let pendingTimeOutAction = null;
-let pendingTimeOutDate = null;
-let settingsClickCount = 0; 
-let pendingExemptId = null;
-let pendingExemptDate = null;
-let pendingExemptCheckbox = null;
-let adminMathAns = 0; 
 
 function getShiftDateDetails() {
     const pht = getPHT();
@@ -370,7 +417,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     pullFromCloud().then(() => {
         checkDeviceLock(); 
-        
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderStudents();
             renderLogs();
@@ -384,7 +430,6 @@ document.addEventListener('DOMContentLoaded', () => {
 setInterval(async () => {
     await pullFromCloud(); 
     await checkBackendLockStatus(); 
-    
     checkDeviceLock(); 
 
     if (isAuthenticated()) {
@@ -475,50 +520,6 @@ async function loginAdmin(event) {
     }
 }
 
-function applyVisitorMode() {
-    let tk = sessionStorage.getItem('_auth_tkn_x92');
-    if (!tk) return;
-    
-    let userRole = 'ADMIN';
-    try { 
-        userRole = JSON.parse(atob(tk)).role || 'ADMIN'; 
-    } catch(e) {}
-
-    if (userRole === 'VISITOR') {
-        // 1. Hide Remove, Delete (X), and Edit Buttons
-        document.querySelectorAll('.remove-btn, .history-trash-btn, button[onclick^="openEditStudentModal"]').forEach(btn => {
-            btn.style.display = 'none';
-        });
-
-        // 2. Hide the "Create Student Support" button
-        const createStudentBtn = document.querySelector('button[onclick="createStudent()"]');
-        if (createStudentBtn) createStudentBtn.style.display = 'none';
-
-        // 3. Hide Google Sheets & Export Excel Buttons
-        const sheetBtn = document.getElementById('history-sheet-btn');
-        const exportBtn = document.getElementById('history-export-btn');
-        if (sheetBtn) sheetBtn.style.display = 'none';
-        if (exportBtn) exportBtn.style.display = 'none';
-
-        const exemptAllBtn = document.getElementById('history-exempt-all-btn');
-        if (exemptAllBtn) exemptAllBtn.style.display = 'none';
-        
-        document.querySelectorAll('input[onchange^="toggleExempt"]').forEach(chk => {
-            chk.disabled = true; 
-            chk.style.cursor = 'not-allowed';
-        });
-
-        const settingsSection = document.getElementById('sec-settings');
-        if (settingsSection) {
-            settingsSection.querySelectorAll('button').forEach(btn => {
-                btn.disabled = true;
-                btn.style.opacity = '0.3';
-                btn.style.cursor = 'not-allowed';
-            });
-        }
-    }
-}
-
 function logoutAdmin() {
     sessionStorage.removeItem('_auth_tkn_x92');
     sessionStorage.removeItem('currentAdminSec');
@@ -541,6 +542,8 @@ async function createAdminAccount() {
     const user = document.getElementById('new-admin-user').value.trim();
     const pass = document.getElementById('new-admin-pass').value.trim();
     const mathInput = document.getElementById('admin-math-a').value.trim();
+    const roleEl = document.getElementById('new-admin-role');
+    const role = roleEl ? roleEl.value : 'ADMIN';
     
     if(!user || !pass || mathInput === "") {
         showMessage('acc-message', 'Please fill all fields', 'error');
@@ -557,7 +560,7 @@ async function createAdminAccount() {
         const response = await fetch(`${API_BASE_URL}/add-account`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-            body: JSON.stringify({ username: user, password: pass })
+            body: JSON.stringify({ username: user, password: pass, role: role })
         });
 
         const data = await response.json();
@@ -595,12 +598,13 @@ async function fetchAdminAccounts() {
             li.style.alignItems = 'center';
             
             let delBtn = user !== 'MainHeadAcc' 
-                ? `<button onclick="deleteAdminAccount('${user}')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 4px 8px; font-size: 10px; cursor: pointer;">DELETE</button>` 
+                ? `<button onclick="deleteAdminAccount('${user}')" class="remove-btn" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 4px 8px; font-size: 10px; cursor: pointer;">DELETE</button>` 
                 : `<span style="font-size: 10px; color: var(--text-muted);">DEFAULT</span>`;
 
             li.innerHTML = `<span style="color: var(--text-main); font-weight: bold;">${user}</span> ${delBtn}`;
             list.appendChild(li);
         });
+        applyVisitorMode();
     } catch (err) {
         list.innerHTML = `<li style="color: var(--error); padding: 10px; text-align: center;">Unable to load accounts.</li>`;
     }
@@ -1052,34 +1056,27 @@ async function applyExempt(type) {
     const s = students.find(x => String(x.id) === String(pendingExemptId));
     
     if (s) {
-        const existingInLog = logs.find(l => String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('In') && !l.action.includes('Exempted'));
-        const existingOutLog = logs.find(l => String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Out') && !l.action.includes('Exempted'));
-
-        logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && (l.action.includes('Exempted') || l.action === 'No Attendance')));
-
         if (type === 'IN' || type === 'BOTH') {
-            logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('In')));
+            logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Time In')));
             logs.push({
                 name: s.name,
                 id: s.id,
                 action: 'Time In (Exempted)',
                 time: 'Exempted',
                 date: pendingExemptDate,
-                details: null,
-                originalLog: existingInLog || null
+                details: null
             });
         }
         
         if (type === 'OUT' || type === 'BOTH') {
-            logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Out')));
+            logs = logs.filter(l => !(String(l.id) === String(pendingExemptId) && l.date === pendingExemptDate && l.action.includes('Time Out')));
             logs.push({
                 name: s.name,
                 id: s.id,
                 action: 'Time Out (Exempted)',
                 time: 'Exempted',
                 date: pendingExemptDate,
-                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
-                originalLog: existingOutLog || null
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
             });
         }
 
@@ -1102,12 +1099,7 @@ async function removeExemptions(idNum, dateStr) {
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
-    const exemptLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted'));
     logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted')));
-    
-    exemptLogs.forEach(el => {
-        if (el.originalLog) logs.push(el.originalLog);
-    });
     
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     await pushLogsToCloud();
@@ -1134,9 +1126,6 @@ async function exemptAllForDate(dateStr) {
 
         scheduledStudents.forEach(s => {
             const idNum = s.id;
-            const existingInLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
-            const existingOutLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
-
             logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr));
 
             logs.push({
@@ -1145,8 +1134,7 @@ async function exemptAllForDate(dateStr) {
                 action: 'Time In (Exempted)',
                 time: 'Exempted',
                 date: dateStr,
-                details: null,
-                originalLog: existingInLog || null
+                details: null
             });
 
             logs.push({
@@ -1155,8 +1143,7 @@ async function exemptAllForDate(dateStr) {
                 action: 'Time Out (Exempted)',
                 time: 'Exempted',
                 date: dateStr,
-                details: { gcHandle: '-', announcement: '-', whoPosted: '-' },
-                originalLog: existingOutLog || null
+                details: { gcHandle: '-', announcement: '-', whoPosted: '-' }
             });
         });
 
@@ -1347,7 +1334,7 @@ async function handleTimeIn() {
         }
 
         const todayLogs = getTodayLogs(idNum);
-        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance' || l.action.includes('Exempted'))) {
+        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance')) {
             showMessage('student-message', 'You already have an attendance record for today.', 'error');
             initSliderCaptcha();
             checkDeviceLock();
@@ -1590,12 +1577,13 @@ function renderStudents() {
                 <span style="font-size: 0.8rem; color: var(--text-muted);">ID: ${student.id}</span>
             </div>
             <div style="display: flex; gap: 5px;">
-                <button onclick="openEditStudentModal('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">EDIT</button>
+                <button class="edit-btn" onclick="openEditStudentModal('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">EDIT</button>
                 <button onclick="viewPerformance('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">VIEW PERF</button>
             </div>
         `;
         list.appendChild(li);
     });
+    applyVisitorMode();
 }
 
 function searchStudents() {
@@ -1728,6 +1716,11 @@ function verifyDevPassword() {
 
 function switchAdminSection(sectionId, navElement) {
     if(!isAuthenticated()) return;
+    
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    let userRole = 'ADMIN';
+    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+
     document.querySelectorAll('.admin-section').forEach(sec => sec.classList.remove('active'));
     const sec = document.getElementById(sectionId);
     if(sec) sec.classList.add('active');
@@ -1736,10 +1729,6 @@ function switchAdminSection(sectionId, navElement) {
     if(navElement) navElement.classList.add('active');
 
     sessionStorage.setItem('currentAdminSec', sectionId);
-
-    let tk = sessionStorage.getItem('_auth_tkn_x92');
-    let userRole = 'ADMIN';
-    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
 
     if (sectionId === 'sec-settings') {
         if (userRole !== 'VISITOR') {
@@ -1885,6 +1874,7 @@ function renderLogs() {
         `;
         tbody.appendChild(tr);
     });
+    applyVisitorMode();
 }
 
 function renderDutyToday() {
@@ -1910,8 +1900,8 @@ function renderDutyToday() {
     }
 
     scheduledToday.forEach(student => {
-        const hasTimedIn = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('In'));
-        const hasTimedOut = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
+        const hasTimedIn = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('Time In'));
+        const hasTimedOut = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('Time Out'));
 
         let statusDot = '#f59e0b'; 
         if (hasTimedOut) {
@@ -1968,7 +1958,7 @@ function exportToExcel(dateStr = null) {
         const studentLogs = targetLogs.filter(l => String(l.id) === String(student.id));
         
         let isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
-        if (studentLogs.some(l => l.action.includes('In') || l.action.includes('Out') || l.action === 'No Attendance')) {
+        if (studentLogs.some(l => l.action.includes('Time In') || l.action.includes('Time Out') || l.action === 'No Attendance')) {
             isScheduled = true;
         }
 
@@ -1979,40 +1969,36 @@ function exportToExcel(dateStr = null) {
         let post = '-';
 
         if (studentLogs.length > 0) {
-            const timeInLog = studentLogs.find(l => l.action.includes('In'));
-            const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+            const timeInLog = studentLogs.find(l => l.action.includes('Time In'));
+            const timeOutLog = studentLogs.find(l => l.action.includes('Time Out'));
             const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-            const exemptLog = studentLogs.find(l => l.action === 'Exempted');
+            
+            const inExempted = timeInLog && timeInLog.action.includes('Exempted');
+            const outExempted = timeOutLog && timeOutLog.action.includes('Exempted');
+            const hasAnyExemption = inExempted || outExempted;
 
-            if (exemptLog) {
-                inText = 'Exempted';
-                outText = 'Exempted';
-            } else if (noAttLog) {
+            if (noAttLog && !hasAnyExemption) {
                 inText = 'Absent';
                 outText = 'Absent';
             } else {
-                if (timeInLog) {
-                    if (timeInLog.action.includes('Exempted')) {
-                        inText = 'Exempted';
-                    } else {
-                        const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
-                        inText = `${timeInLog.time} - ${status}`;
-                    }
+                if (inExempted) {
+                    inText = 'Exempted';
+                } else if (timeInLog) {
+                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                    inText = `${timeInLog.time} - ${status}`;
                 } else {
                     inText = 'Absent';
                 }
 
-                if (timeOutLog) {
-                    if (timeOutLog.action.includes('Exempted')) {
-                        outText = 'Exempted';
-                    } else {
-                        const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
-                        outText = `${timeOutLog.time} - ${status}`;
-                        const details = timeOutLog.details || {};
-                        gc = details.gcHandle || '-';
-                        ann = details.announcement || '-';
-                        post = details.whoPosted || '-';
-                    }
+                if (outExempted) {
+                    outText = 'Exempted';
+                } else if (timeOutLog) {
+                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                    outText = `${timeOutLog.time} - ${status}`;
+                    const details = timeOutLog.details || {};
+                    gc = details.gcHandle || '-';
+                    ann = details.announcement || '-';
+                    post = details.whoPosted || '-';
                 } else {
                     outText = 'Absent';
                 }
@@ -2088,7 +2074,7 @@ async function recordToGoogleSheets(dateStr) {
         const studentLogs = targetLogs.filter(l => String(l.id) === String(student.id));
         
         let isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
-        if (studentLogs.some(l => l.action.includes('In') || l.action.includes('Out') || l.action === 'No Attendance')) {
+        if (studentLogs.some(l => l.action.includes('Time In') || l.action.includes('Time Out') || l.action === 'No Attendance')) {
             isScheduled = true;
         }
 
@@ -2099,40 +2085,36 @@ async function recordToGoogleSheets(dateStr) {
         let post = '-';
 
         if (studentLogs.length > 0) {
-            const timeInLog = studentLogs.find(l => l.action.includes('In'));
-            const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+            const timeInLog = studentLogs.find(l => l.action.includes('Time In'));
+            const timeOutLog = studentLogs.find(l => l.action.includes('Time Out'));
             const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-            const exemptLog = studentLogs.find(l => l.action === 'Exempted');
+            
+            const inExempted = timeInLog && timeInLog.action.includes('Exempted');
+            const outExempted = timeOutLog && timeOutLog.action.includes('Exempted');
+            const hasAnyExemption = inExempted || outExempted;
 
-            if (exemptLog) {
-                inText = 'Exempted';
-                outText = 'Exempted';
-            } else if (noAttLog) {
+            if (noAttLog && !hasAnyExemption) {
                 inText = 'Absent';
                 outText = 'Absent';
             } else {
-                if (timeInLog) {
-                    if (timeInLog.action.includes('Exempted')) {
-                        inText = 'Exempted';
-                    } else {
-                        const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
-                        inText = `${timeInLog.time} - ${status}`;
-                    }
+                if (inExempted) {
+                    inText = 'Exempted';
+                } else if (timeInLog) {
+                    const status = timeInLog.action.includes('Late') ? 'Time in(Late)' : 'Time in';
+                    inText = `${timeInLog.time} - ${status}`;
                 } else {
                     inText = 'Absent';
                 }
 
-                if (timeOutLog) {
-                    if (timeOutLog.action.includes('Exempted')) {
-                        outText = 'Exempted';
-                    } else {
-                        const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
-                        outText = `${timeOutLog.time} - ${status}`;
-                        const details = timeOutLog.details || {};
-                        gc = details.gcHandle || '-';
-                        ann = details.announcement || '-';
-                        post = details.whoPosted || '-';
-                    }
+                if (outExempted) {
+                    outText = 'Exempted';
+                } else if (timeOutLog) {
+                    const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
+                    outText = `${timeOutLog.time} - ${status}`;
+                    const details = timeOutLog.details || {};
+                    gc = details.gcHandle || '-';
+                    ann = details.announcement || '-';
+                    post = details.whoPosted || '-';
                 } else {
                     outText = 'Absent';
                 }
@@ -2173,7 +2155,6 @@ async function recordToGoogleSheets(dateStr) {
             alert(`Successfully saved fresh logs for ${dateStr} to Google Sheets!`);
         }
     } catch (error) {
-        console.error("Error sending to Google Sheets:", error);
         alert("Network error trying to contact Google Sheets. Please ensure you deployed the New Version in Apps Script.");
     } finally {
         if (sheetBtn) {
@@ -2344,6 +2325,7 @@ function renderSchedule() {
         `;
         tbody.appendChild(tr);
     });
+    applyVisitorMode();
 }
 
 function renderHistoryView() {
@@ -2396,6 +2378,7 @@ function renderHistoryView() {
     
     const tbl = document.getElementById('history-table-container');
     if(tbl) tbl.style.display = 'none';
+    applyVisitorMode();
 }
 
 async function renderHistoryTable(dateStr) {
@@ -2488,10 +2471,13 @@ async function renderHistoryTable(dateStr) {
         const name = student.name || 'Unknown';
         const studentLogs = dayLogs.filter(l => String(l.id) === String(id));
         
-        const timeInLog = studentLogs.find(l => l.action.includes('In'));
-        const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+        const timeInLog = studentLogs.find(l => l.action.includes('Time In'));
+        const timeOutLog = studentLogs.find(l => l.action.includes('Time Out'));
         const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-        const isExempted = studentLogs.some(l => l.action.includes('Exempted'));
+        
+        const inExempted = timeInLog && timeInLog.action.includes('Exempted');
+        const outExempted = timeOutLog && timeOutLog.action.includes('Exempted');
+        const hasAnyExemption = inExempted || outExempted;
 
         let inText = '<span style="color: var(--error);">Absent</span>';
         let outText = '<span style="color: var(--error);">Absent</span>';
@@ -2499,18 +2485,20 @@ async function renderHistoryTable(dateStr) {
         let ann = '-';
         let post = '-';
 
-        if (isExempted) {
-            inText = '<span style="color: #66fcf1;">Exempted</span>';
-            outText = '<span style="color: #66fcf1;">Exempted</span>';
-        } else if (noAttLog) {
+        if (noAttLog && !hasAnyExemption) {
             inText = '<span style="color: var(--error);">No Attendance</span>';
             outText = '<span style="color: var(--error);">No Attendance</span>';
         } else {
-            if (timeInLog) {
+            if (inExempted) {
+                inText = '<span style="color: #66fcf1;">Exempted</span>';
+            } else if (timeInLog) {
                 const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
                 inText = `<span style="color: ${color};">${timeInLog.time}</span>`;
             }
-            if (timeOutLog) {
+
+            if (outExempted) {
+                outText = '<span style="color: #66fcf1;">Exempted</span>';
+            } else if (timeOutLog) {
                 const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
                 outText = `<span style="color: ${color};">${timeOutLog.time}</span>`;
                 const details = timeOutLog.details || {};
@@ -2520,7 +2508,7 @@ async function renderHistoryTable(dateStr) {
             }
         }
 
-        const checkedAttr = isExempted ? 'checked' : '';
+        const checkedAttr = hasAnyExemption ? 'checked' : '';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -2535,6 +2523,7 @@ async function renderHistoryTable(dateStr) {
         `;
         tbody.appendChild(tr);
     });
+    applyVisitorMode();
 }
 
 function initDevUI() {}
@@ -2639,7 +2628,7 @@ function renderMainDashboard() {
 
         scheduledToday.forEach(student => {
             const studentTodayLogs = logs.filter(l => String(l.id) === String(student.id) && l.date === todayStr);
-            const timeInLog = studentTodayLogs.find(l => l.action.includes('In') || l.action.includes('Exempted'));
+            const timeInLog = studentTodayLogs.find(l => l.action.includes('Time In'));
             
             if (timeInLog) {
                 presentCount++;
@@ -2688,7 +2677,7 @@ function renderMainDashboard() {
                 let dStr = d.toLocaleDateString('en-US');
                 let dayIdx = d.getDay();
                 
-                let pCount = logs.filter(l => l.date === dStr && (l.action.includes('In') || l.action.includes('Exempted')) && l.id !== 'SYS_DELETED_DATE').length;
+                let pCount = logs.filter(l => l.date === dStr && l.action.includes('Time In') && l.id !== 'SYS_DELETED_DATE').length;
                 weeklyData.push({ dayLabel: dayNames[dayIdx], count: pCount });
             }
             
@@ -2707,8 +2696,8 @@ function renderMainDashboard() {
             });
         }
 
-        const timeInLogs = logs.filter(l => l.date === todayStr && l.action.includes('In') && !l.action.includes('Exempted'));
-        const timeOutLogs = logs.filter(l => l.date === todayStr && l.action.includes('Out') && !l.action.includes('Exempted'));
+        const timeInLogs = logs.filter(l => l.date === todayStr && l.action.includes('Time In') && !l.action.includes('Exempted'));
+        const timeOutLogs = logs.filter(l => l.date === todayStr && l.action.includes('Time Out') && !l.action.includes('Exempted'));
         
         const hourlyInCounts = new Array(24).fill(0);
         const hourlyOutCounts = new Array(24).fill(0);
@@ -2723,9 +2712,8 @@ function renderMainDashboard() {
                     if (ampm === 'PM' && h !== 12) h += 12;
                     if (ampm === 'AM' && h === 12) h = 0;
                     
-                    let index = (h >= 5) ? (h - 5) : (h + 19);
-                    if (index >= 0 && index < 24) {
-                        arr[index]++;
+                    if (h >= 0 && h < 24) {
+                        arr[h]++;
                     }
                 }
             });
@@ -2734,22 +2722,30 @@ function renderMainDashboard() {
         populateCounts(timeInLogs, hourlyInCounts);
         populateCounts(timeOutLogs, hourlyOutCounts);
 
-        const maxLineVal = Math.max(...hourlyInCounts, ...hourlyOutCounts, 5);
+        const maxLineVal = 50; 
         const lineChartContainer = document.getElementById('dash-line-chart-container');
         if (lineChartContainer) {
-            let svgHTML = `<svg width="100%" height="100%" viewBox="-10 -20 260 140" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
+            let svgHTML = `<svg width="100%" height="100%" viewBox="-15 -20 270 140" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
             
+            for(let val = 0; val <= 50; val += 10) {
+                let yLine = 100 - ((val / maxLineVal) * 100);
+                svgHTML += `<line x1="0" y1="${yLine}" x2="240" y2="${yLine}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />`;
+                svgHTML += `<text x="-5" y="${yLine + 3}" fill="var(--text-muted)" font-size="8" text-anchor="end">${val}</text>`;
+            }
+
             let inPoints = [];
             hourlyInCounts.forEach((count, i) => {
                 let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
+                let c = Math.min(count, maxLineVal);
+                let y = 100 - ((c / maxLineVal) * 100);
                 inPoints.push(`${x},${y}`);
             });
 
             let outPoints = [];
             hourlyOutCounts.forEach((count, i) => {
                 let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
+                let c = Math.min(count, maxLineVal);
+                let y = 100 - ((c / maxLineVal) * 100);
                 outPoints.push(`${x},${y}`);
             });
             
@@ -2758,7 +2754,8 @@ function renderMainDashboard() {
             
             hourlyOutCounts.forEach((count, i) => {
                 let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
+                let c = Math.min(count, maxLineVal);
+                let y = 100 - ((c / maxLineVal) * 100);
                 svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--error)" stroke-width="1.5" />`;
                 if (count > 0) {
                     svgHTML += `<text x="${x}" y="${y + 12}" fill="var(--error)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
@@ -2767,7 +2764,8 @@ function renderMainDashboard() {
 
             hourlyInCounts.forEach((count, i) => {
                 let x = (i / 23) * 240;
-                let y = 100 - ((count / maxLineVal) * 100);
+                let c = Math.min(count, maxLineVal);
+                let y = 100 - ((c / maxLineVal) * 100);
                 svgHTML += `<circle cx="${x}" cy="${y}" r="3.5" fill="#1e2128" stroke="var(--accent)" stroke-width="1.5" />`;
                 if (count > 0) {
                     svgHTML += `<text x="${x}" y="${y - 8}" fill="var(--accent)" font-size="9" text-anchor="middle" font-weight="bold">${count}</text>`;
@@ -2776,8 +2774,8 @@ function renderMainDashboard() {
 
             svgHTML += `</svg>`;
             
-            let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 10px; color: var(--text-muted); font-size: 10px; padding: 0 5px;">`;
-            const lineLabels = ['5a','','','8a','','','11a','','','2p','','','5p','','','8p','','','11p','','','2a','','4a'];
+            let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 10px; color: var(--text-muted); font-size: 9px; padding: 0;">`;
+            const lineLabels = ['12a','1a','2a','3a','4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p'];
             lineLabels.forEach(lbl => {
                 labelsHTML += `<span style="flex: 1; text-align: center;">${lbl}</span>`;
             });
@@ -2876,9 +2874,8 @@ function renderMainDashboard() {
                 });
             }
         }
-    } catch (e) {
-        console.error("Dashboard Render Error:", e);
-    }
+    } catch (e) {}
+    applyVisitorMode();
 }
 
 function renderDashboardSummary() {
@@ -2933,8 +2930,8 @@ function renderDashboardSummary() {
     });
 
     filteredStudents.forEach(student => {
-        const hasTimedOutToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && (l.action.includes('Out') || l.action.includes('Exempted')));
-        const hasTimedInToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('In'));
+        const hasTimedOutToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('Time Out'));
+        const hasTimedInToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('Time In'));
         
         let todayShiftBtn = '';
         if (hasTimedOutToday) {
@@ -3062,8 +3059,8 @@ function viewTodayShift(idNum, dateStr) {
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
     const dayLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr);
-    const timeInLog = dayLogs.find(l => l.action.includes('In') || l.action.includes('Exempted'));
-    const timeOutLog = dayLogs.find(l => l.action.includes('Out') || l.action.includes('Exempted'));
+    const timeInLog = dayLogs.find(l => l.action.includes('Time In'));
+    const timeOutLog = dayLogs.find(l => l.action.includes('Time Out'));
     
     if (!timeOutLog) return; 
     
@@ -3497,35 +3494,4 @@ async function isIncognito() {
             resolve(false);
         }
     });
-}
-
-function enforceVisitorModeConstraints(currentUserRole) {
-    
-    if (currentUserRole === 'VISITOR') {
-        
-        const settingsNavBtn = document.getElementById('nav-settings-btn');
-        if (settingsNavBtn) {
-            settingsNavBtn.style.display = 'none';
-        }
-        
-        const removeButtons = document.querySelectorAll('.remove-btn');
-        removeButtons.forEach(btn => {
-            btn.style.display = 'none';
-        });
-        
-        const historyTrashButtons = document.querySelectorAll('.history-trash-btn');
-        historyTrashButtons.forEach(btn => {
-            btn.style.display = 'none';
-        });
-
-        const exemptAllBtn = document.getElementById('history-exempt-all-btn');
-        if (exemptAllBtn) {
-            exemptAllBtn.style.display = 'none';
-        }
-        
-        const editButtons = document.querySelectorAll('.edit-btn');
-        editButtons.forEach(btn => {
-             btn.style.display = 'none';
-        });
-    }
 }

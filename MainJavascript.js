@@ -3,9 +3,21 @@ console.log("%cBawal ka dito panget", "color: white; background: red; font-size:
 
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
-
-// Secret Key to authenticate with the backend
 const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
+
+// Global Time Travel State synced with Backend
+let globalTimeOffset = 0;
+let globalDayOverride = "";
+
+// Start ticking the simulated clock globally
+setInterval(() => {
+    if (globalTimeOffset !== 0) {
+        document.getElementById('simulated-clock-container').style.display = 'block';
+        document.getElementById('simulated-time-display').textContent = getPHT().toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute:'2-digit', second:'2-digit'});
+    } else {
+        document.getElementById('simulated-clock-container').style.display = 'none';
+    }
+}, 1000);
 
 const isAuthenticated = function() {
     const tk = sessionStorage.getItem('_auth_tkn_x92');
@@ -25,6 +37,11 @@ async function checkBackendLockStatus() {
         const response = await fetch(`${API_BASE_URL}/config/status`, { cache: 'no-store' });
         if (response.ok) {
             const data = await response.json();
+            
+            // Sync Time Travel offsets from Backend
+            globalTimeOffset = data.timeOffset || 0;
+            globalDayOverride = data.dayOverride || "";
+
             if (isBackendLocked !== data.isLocked) {
                 isBackendLocked = data.isLocked;
                 localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
@@ -38,7 +55,6 @@ async function checkBackendLockStatus() {
 
 async function toggleAttendanceState(elem) {
     const isClosed = elem.checked;
-    
     const knob = document.getElementById('sys-toggle-knob');
     if(knob) {
         knob.style.transform = isClosed ? 'translateX(20px)' : 'translateX(0px)';
@@ -48,10 +64,7 @@ async function toggleAttendanceState(elem) {
     try {
         const response = await fetch(`${API_BASE_URL}/config/toggle`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY // Security Header
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
             body: JSON.stringify({ isLocked: isClosed })
         });
         
@@ -71,13 +84,11 @@ async function toggleAttendanceState(elem) {
     } catch (err) {
         console.error("Lock Sync Error:", err);
         elem.checked = !isClosed;
-        alert("Network error trying to lock system.");
     }
 }
 
 function applyUIRestrictions() {
     const isLocked = localStorage.getItem('attendance_closed') === 'true';
-    
     const lockToggle = document.getElementById('sys-attendance-toggle');
     const lockKnob = document.getElementById('sys-toggle-knob');
     if(lockToggle && lockKnob) {
@@ -87,14 +98,10 @@ function applyUIRestrictions() {
     }
     
     const studentLockOverlay = document.getElementById('student-lock-overlay');
-    if (studentLockOverlay) {
-        studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
-    }
+    if (studentLockOverlay) studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
 
     const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
-    if (adminLiveLockOverlay) {
-        adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
-    }
+    if (adminLiveLockOverlay) adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
 
     document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
         if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
@@ -202,10 +209,7 @@ async function pushStudentsToCloud() {
     try {
         await fetch(`${API_BASE_URL}/students/sync`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
             body: JSON.stringify(data)
         });
     } catch (err) { console.error("Cloud Student Sync Failed"); }
@@ -217,20 +221,13 @@ async function pushLogsToCloud() {
     try {
         const response = await fetch(`${API_BASE_URL}/logs/sync`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY 
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
             body: JSON.stringify(data)
         });
-
         if (response.status === 403) {
-            console.warn("Backend rejected sync: SYSTEM IS LOCKED.");
             isBackendLocked = true;
             localStorage.setItem('attendance_closed', 'true');
             applyUIRestrictions();
-        } else if (response.status === 401) {
-            console.error("Backend rejected sync: UNAUTHORIZED HACKER BLOCKED.");
         }
     } catch (err) { console.error("Cloud Log Sync Failed"); }
 }
@@ -249,7 +246,6 @@ function getShiftDateDetails() {
     const min = pht.getMinutes();
     
     let shiftDate = new Date(pht);
-    // Shift resets exactly at 4:00 AM
     if (hour < 4 || (hour === 4 && min === 0)) {
         shiftDate.setDate(shiftDate.getDate() - 1);
     }
@@ -258,7 +254,7 @@ function getShiftDateDetails() {
     
     return {
         dateStr: shiftDate.toLocaleDateString('en-US'),
-        dayStr: days[shiftDate.getDay()],
+        dayStr: globalDayOverride || days[shiftDate.getDay()],
         hour: hour,
         min: min,
         realTimeStr: pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -306,12 +302,12 @@ if (_needsSave && isAuthenticated()) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    initDevUI();
     loadAccentColor();
     document.body.classList.add('portal-mode');
 
     checkBackendLockStatus().then(() => {
         applyUIRestrictions();
+        initDevUI();
     });
     
     checkDeviceLock();
@@ -480,10 +476,7 @@ async function createAdminAccount() {
     try {
         const response = await fetch(`${API_BASE_URL}/add-account`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Admin-Key': ADMIN_SECRET_KEY
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
             body: JSON.stringify({ username: user, password: pass })
         });
 
@@ -553,9 +546,7 @@ async function generateRegistrationLink() {
             headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
         });
         const data = await response.json();
-        
         const link = `https://os-register.vercel.app/?token=${data.token}`;
-        
         document.getElementById('reg-link-container').style.display = 'block';
         document.getElementById('reg-link-output').value = link;
     } catch (err) {
@@ -573,7 +564,6 @@ function copyRegLink() {
 
 async function createStudent() {
     if(!isAuthenticated()) return;
-    
     const btn = document.querySelector('button[onclick="createStudent()"]');
     if (btn && btn.disabled) return; 
 
@@ -582,13 +572,8 @@ async function createStudent() {
     const gcHandle = document.getElementById('new-student-gc').value.trim();
     const classLevel = document.getElementById('new-student-class').value;
 
-    if (!name || !idNum) {
-        showMessage('admin-message', 'Please fill in Name and ID fields.', 'error');
-        return;
-    }
-    
-    if (!classLevel) {
-        showMessage('admin-message', 'Please select a Class Level.', 'error');
+    if (!name || !idNum || !classLevel) {
+        showMessage('admin-message', 'Please fill in Name, ID, and Class Level.', 'error');
         return;
     }
 
@@ -601,7 +586,6 @@ async function createStudent() {
 
     try {
         await pullFromCloud();
-
         const students = JSON.parse(localStorage.getItem('students')) || [];
         
         if (students.some(s => String(s.id).toLowerCase() === String(idNum).toLowerCase())) {
@@ -609,14 +593,7 @@ async function createStudent() {
             return;
         }
 
-        students.push({ 
-            name: name, 
-            id: idNum, 
-            assignedDays: [],
-            gcHandle: gcHandle,
-            classLevel: classLevel
-        });
-        
+        students.push({ name: name, id: idNum, assignedDays: [], gcHandle: gcHandle, classLevel: classLevel });
         localStorage.setItem('students', JSON.stringify(students));
         await pushStudentsToCloud(); 
         
@@ -624,7 +601,6 @@ async function createStudent() {
         document.getElementById('new-student-id').value = '';
         document.getElementById('new-student-gc').value = '';
         document.getElementById('new-student-class').value = '';
-        
         showMessage('admin-message', 'Student created globally!', 'success');
         
         renderStudents();
@@ -653,7 +629,6 @@ async function updateStudentGC() {
     }
 
     await pullFromCloud();
-
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const studentIndex = students.findIndex(s => String(s.id) === String(idNum));
 
@@ -668,7 +643,6 @@ async function updateStudentGC() {
 
     document.getElementById('edit-student-id').value = '';
     document.getElementById('edit-student-gc').value = '';
-
     showMessage('edit-gc-message', 'GC Handle updated globally!', 'success');
     
     renderStudents();
@@ -696,11 +670,7 @@ function openEditStudentModal(id) {
     gcOther.style.display = 'none';
     gcOther.value = '';
     
-    if (s.classLevel) {
-        classSelect.value = s.classLevel;
-    } else {
-        classSelect.value = 'Freshmen';
-    }
+    classSelect.value = s.classLevel || 'Freshmen';
 
     if (s.gcHandle) {
         const optionExists = Array.from(gcSelect.options).some(opt => opt.value === s.gcHandle);
@@ -732,7 +702,6 @@ function closeEditStudentModal() {
 
 async function saveStudentEdit() {
     if(!isAuthenticated()) return;
-    
     const btn = document.querySelector('#edit-student-modal .btn-primary');
     if (btn && btn.disabled) return;
 
@@ -742,9 +711,7 @@ async function saveStudentEdit() {
     const classLevel = document.getElementById('edit-stu-class').value;
     let gc = document.getElementById('edit-stu-gc').value;
     
-    if (gc === 'Other') {
-        gc = document.getElementById('edit-stu-gc-other').value.trim();
-    }
+    if (gc === 'Other') gc = document.getElementById('edit-stu-gc-other').value.trim();
 
     if (!name || !newId) {
         alert("Name and Student ID cannot be empty.");
@@ -768,7 +735,6 @@ async function saveStudentEdit() {
         }
 
         const s = students.find(x => String(x.id) === String(origId));
-        
         if (s) {
             s.name = name;
             s.id = newId; 
@@ -780,7 +746,6 @@ async function saveStudentEdit() {
             if (origId !== newId) {
                 let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
                 let logsUpdated = false;
-                
                 logs.forEach(l => {
                     if (String(l.id) === String(origId)) {
                         l.id = newId;
@@ -788,7 +753,6 @@ async function saveStudentEdit() {
                         logsUpdated = true;
                     }
                 });
-                
                 if (logsUpdated) {
                     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
                     await pushLogsToCloud();
@@ -802,7 +766,6 @@ async function saveStudentEdit() {
             renderDutyToday();
             if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
         }
-        
         closeEditStudentModal();
     } finally {
         if (btn) {
@@ -819,7 +782,6 @@ async function deleteStudent(idNum) {
     if (!confirm("Are you sure you want to remove this student? This will not delete their existing logs but will prevent them from logging in.")) return;
     
     await pullFromCloud();
-
     let students = JSON.parse(localStorage.getItem('students')) || [];
     students = students.filter(s => String(s.id) !== String(idNum));
     localStorage.setItem('students', JSON.stringify(students));
@@ -848,7 +810,6 @@ async function toggleStudentDay(id, day) {
     
     if (student) {
         if (!student.assignedDays) student.assignedDays = [];
-        
         if (student.assignedDays.includes(day)) {
             student.assignedDays = student.assignedDays.filter(d => d !== day);
         } else {
@@ -864,7 +825,6 @@ async function toggleStudentDay(id, day) {
             renderLogs();
             renderDutyToday();
         }
-
         pushStudentsToCloud(); 
     }
 }
@@ -933,9 +893,7 @@ function deleteHistoryDate(dateStr, event) {
     if(confirm(`⚠️ WARNING ⚠️\n\nAre you sure you want to completely delete ALL attendance logs for ${dateStr}?\n\nThis will permanently remove this day from the students' Performance Stats.`)) {
         
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-        
         logs = logs.filter(l => l.date !== dateStr);
-        
         logs.push({
             name: 'SYSTEM_DELETED',
             id: 'SYS_DELETED_DATE',
@@ -976,9 +934,7 @@ function toggleExempt(idNum, dateStr, checkbox) {
 function closeExemptModal() {
     const modal = document.getElementById('exempt-modal');
     if (modal) modal.style.display = 'none';
-    if (pendingExemptCheckbox) {
-        pendingExemptCheckbox.checked = false;
-    }
+    if (pendingExemptCheckbox) pendingExemptCheckbox.checked = false;
     pendingExemptId = null;
     pendingExemptDate = null;
     pendingExemptCheckbox = null;
@@ -1043,13 +999,10 @@ async function removeExemptions(idNum, dateStr) {
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
     const exemptLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted'));
-    
     logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Exempted')));
     
     exemptLogs.forEach(el => {
-        if (el.originalLog) {
-            logs.push(el.originalLog);
-        }
+        if (el.originalLog) logs.push(el.originalLog);
     });
     
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
@@ -1077,7 +1030,6 @@ async function exemptAllForDate(dateStr) {
 
         scheduledStudents.forEach(s => {
             const idNum = s.id;
-
             const existingInLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('In') && !l.action.includes('Exempted'));
             const existingOutLog = logs.find(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes('Out') && !l.action.includes('Exempted'));
 
@@ -1117,9 +1069,6 @@ async function exemptAllForDate(dateStr) {
     }
 }
 
-// ==========================================
-// GLOBAL WIPE SYNC LOGIC FOR DEV LOGS
-// ==========================================
 async function devClearLogs() {
     if(!isAuthenticated()) return;
     if(confirm("This will permanently delete ALL attendance logs from the cloud database ACROSS ALL DEVICES. Continue?")) {
@@ -1143,9 +1092,6 @@ async function devClearLogs() {
     }
 }
 
-// ==========================================
-// GLOBAL WIPE SYNC LOGIC FOR FACTORY RESET
-// ==========================================
 async function factoryReset() {
     if(!isAuthenticated()) return;
     const firstConfirm = confirm("⚠️ DANGER ⚠️\n\nThis will permanently delete ALL registered students, attendance logs, custom UI settings, and custom Admin accounts ACROSS ALL DEVICES.\n\nAre you absolutely sure you want to do this?");
@@ -1160,7 +1106,6 @@ async function factoryReset() {
                     method: 'DELETE',
                     headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
                 });
-                
                 await fetch(`${API_BASE_URL}/logs/factory-reset`, {
                     method: 'DELETE',
                     headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
@@ -1803,6 +1748,8 @@ function renderDutyToday() {
             statusDot = '#6b7280'; 
         } else if (hasTimedIn) {
             statusDot = '#22c55e'; 
+        } else {
+            statusDot = 'var(--error)'; // Show red if they haven't timed in yet!
         }
 
         const card = document.createElement('div');
@@ -2077,28 +2024,12 @@ function showMessage(elementId, text, type) {
 }
 
 function getPHT() {
-    let pht = new Date();
-    
-    const devDate = localStorage.getItem('devDateOverride');
-    const devTime = localStorage.getItem('devTimeOverride');
-
-    if (devDate) {
-        const [y, m, d] = devDate.split('-');
-        pht.setFullYear(parseInt(y), parseInt(m) - 1, parseInt(d));
-    }
-
-    if (devTime) {
-        const [h, min] = devTime.split(':');
-        pht.setHours(parseInt(h), parseInt(min), 0, 0);
-    }
-
-    return pht;
+    // Calculates a ticking simulated clock based on the backend globalTimeOffset
+    return new Date(Date.now() + globalTimeOffset);
 }
 
 function getPHTDayString() {
-    const devDay = localStorage.getItem('devDayOverride');
-    if (devDay) return devDay;
-
+    if (globalDayOverride) return globalDayOverride;
     const pht = getPHT();
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[pht.getDay()];
@@ -2250,11 +2181,16 @@ function renderHistoryView() {
     if(!isAuthenticated()) return;
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
+    const exemptAllBtn = document.getElementById('history-exempt-all-btn');
+    if (exemptAllBtn) exemptAllBtn.style.display = 'none';
+
+    const logSearchInput = document.getElementById('search-history-logs');
+    if (logSearchInput) logSearchInput.value = '';
+
     const globalDeletedDates = logs.filter(l => l.id === 'SYS_DELETED_DATE').map(l => l.date);
     const validLogs = logs.filter(l => !globalDeletedDates.includes(l.date) && l.id !== 'SYS_WIPE_LOGS' && l.id !== 'SYS_WIPE_ALL');
 
     let uniqueDates = [...new Set(validLogs.map(l => l.date))];
-    
     uniqueDates.sort((a, b) => new Date(b) - new Date(a)); 
 
     let displayDates = uniqueDates.slice(0, 12);
@@ -2299,7 +2235,10 @@ async function renderHistoryTable(dateStr) {
     const container = document.getElementById('history-table-container');
     const title = document.getElementById('history-table-title');
     if(container) container.style.display = 'flex';
-    if(title) title.textContent = `Logs for ${dateStr}`;
+    if(title) {
+        title.textContent = `Logs for ${dateStr}`;
+        title.setAttribute('data-date', dateStr); 
+    }
     
     const exportBtn = document.getElementById('history-export-btn');
     if (exportBtn) exportBtn.onclick = () => exportToExcel(dateStr);
@@ -2309,172 +2248,205 @@ async function renderHistoryTable(dateStr) {
     
     const exemptAllBtn = document.getElementById('history-exempt-all-btn');
     if (exemptAllBtn) {
+        exemptAllBtn.style.display = 'block'; 
         exemptAllBtn.onclick = () => exemptAllForDate(dateStr);
     }
     
     const tbody = document.getElementById('history-logs-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs from secure server...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs...</td></tr>';
 
+    const searchInput = document.getElementById('search-history-logs');
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
+
+    let dayLogs = [];
     try {
         const response = await fetch(`${API_BASE_URL}/logs/history/${encodeURIComponent(dateStr)}`);
-        let dayLogs = [];
         if (response.ok) {
             dayLogs = await response.json();
+        } else {
+            throw new Error("Server API Error");
         }
-
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-        const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
-        
-        const targetDateObj = new Date(dateStr);
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const targetDayStr = dayNames[targetDateObj.getDay()];
-
-        const studentsToRender = validStudents.filter(student => {
-            const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
-            const hasLogs = dayLogs.some(l => String(l.id) === String(student.id));
-            return isScheduled || hasLogs;
-        });
-
-        studentsToRender.sort((a, b) => {
-            const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
-            const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
-            const nameA = (a.name || '').toLowerCase().trim();
-            const nameB = (b.name || '').toLowerCase().trim();
-
-            if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
-            if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
-            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
-        });
-
-        tbody.innerHTML = '';
-
-        if (studentsToRender.length === 0) {
-             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No students scheduled or logged for this date.</td></tr>';
-             return;
-        }
-
-        studentsToRender.forEach(student => {
-            const id = student.id;
-            const name = student.name || 'Unknown';
-            const studentLogs = dayLogs.filter(l => String(l.id) === String(id));
-            
-            const timeInLog = studentLogs.find(l => l.action.includes('In'));
-            const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
-            const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
-            const isExempted = studentLogs.some(l => l.action.includes('Exempted'));
-
-            let inText = '<span style="color: var(--error);">Absent</span>';
-            let outText = '<span style="color: var(--error);">Absent</span>';
-            let gc = '-';
-            let ann = '-';
-            let post = '-';
-
-            if (isExempted) {
-                inText = '<span style="color: #66fcf1;">Exempted</span>';
-                outText = '<span style="color: #66fcf1;">Exempted</span>';
-            } else if (noAttLog) {
-                inText = '<span style="color: var(--error);">No Attendance</span>';
-                outText = '<span style="color: var(--error);">No Attendance</span>';
-            } else {
-                if (timeInLog) {
-                    const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-                    inText = `<span style="color: ${color};">${timeInLog.time}</span>`;
-                }
-                if (timeOutLog) {
-                    const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-                    outText = `<span style="color: ${color};">${timeOutLog.time}</span>`;
-                    const details = timeOutLog.details || {};
-                    gc = details.gcHandle || '-';
-                    ann = details.announcement || '-';
-                    post = details.whoPosted || '-';
-                }
-            }
-
-            const checkedAttr = isExempted ? 'checked' : '';
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${name}</td>
-                <td>${id}</td>
-                <td style="font-weight: bold;">${inText}</td>
-                <td style="font-weight: bold;">${outText}</td>
-                <td style="color: var(--text-muted);">${gc}</td>
-                <td style="color: var(--text-muted);">${ann}</td>
-                <td style="color: var(--text-muted);">${post}</td>
-                <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this)" ${checkedAttr} style="margin: 0 auto; display: block; cursor: pointer;"></td>
-            `;
-            tbody.appendChild(tr);
-        });
-
     } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--error);">Failed to load history from server.</td></tr>';
+        console.warn("Backend fetch failed. Using local storage fallback.");
+        const allLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+        dayLogs = allLogs.filter(l => l.date === dateStr);
     }
+
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
+    
+    const targetDateObj = new Date(dateStr);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDayStr = dayNames[targetDateObj.getDay()];
+
+    let studentsToRender = validStudents.filter(student => {
+        const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
+        const hasLogs = dayLogs.some(l => String(l.id) === String(student.id));
+        return isScheduled || hasLogs;
+    });
+
+    if (query) {
+        studentsToRender = studentsToRender.filter(s => 
+            (s.name || '').toLowerCase().includes(query) || 
+            String(s.id).toLowerCase().includes(query)
+        );
+    }
+
+    studentsToRender.sort((a, b) => {
+        const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
+        const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
+        const nameA = (a.name || '').toLowerCase().trim();
+        const nameB = (b.name || '').toLowerCase().trim();
+
+        if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
+        if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
+        return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+    });
+
+    tbody.innerHTML = '';
+
+    if (studentsToRender.length === 0) {
+         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No records found.</td></tr>';
+         return;
+    }
+
+    studentsToRender.forEach(student => {
+        const id = student.id;
+        const name = student.name || 'Unknown';
+        const studentLogs = dayLogs.filter(l => String(l.id) === String(id));
+        
+        const timeInLog = studentLogs.find(l => l.action.includes('In'));
+        const timeOutLog = studentLogs.find(l => l.action.includes('Out'));
+        const noAttLog = studentLogs.find(l => l.action === 'No Attendance');
+        const isExempted = studentLogs.some(l => l.action.includes('Exempted'));
+
+        // DEFAULT SHOW ABSENT FOR SCHEDULED STUDENTS
+        let inText = '<span style="color: var(--error);">Absent</span>';
+        let outText = '<span style="color: var(--error);">Absent</span>';
+        let gc = '-';
+        let ann = '-';
+        let post = '-';
+
+        if (isExempted) {
+            inText = '<span style="color: #66fcf1;">Exempted</span>';
+            outText = '<span style="color: #66fcf1;">Exempted</span>';
+        } else if (noAttLog) {
+            inText = '<span style="color: var(--error);">No Attendance</span>';
+            outText = '<span style="color: var(--error);">No Attendance</span>';
+        } else {
+            if (timeInLog) {
+                const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+                inText = `<span style="color: ${color};">${timeInLog.time}</span>`;
+            }
+            if (timeOutLog) {
+                const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+                outText = `<span style="color: ${color};">${timeOutLog.time}</span>`;
+                const details = timeOutLog.details || {};
+                gc = details.gcHandle || '-';
+                ann = details.announcement || '-';
+                post = details.whoPosted || '-';
+            }
+        }
+
+        const checkedAttr = isExempted ? 'checked' : '';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${name}</td>
+            <td>${id}</td>
+            <td style="font-weight: bold;">${inText}</td>
+            <td style="font-weight: bold;">${outText}</td>
+            <td style="color: var(--text-muted);">${gc}</td>
+            <td style="color: var(--text-muted);">${ann}</td>
+            <td style="color: var(--text-muted);">${post}</td>
+            <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this)" ${checkedAttr} style="margin: 0 auto; display: block; cursor: pointer;"></td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 function initDevUI() {
-    const dDate = localStorage.getItem('devDateOverride');
-    const dTime = localStorage.getItem('devTimeOverride');
-    const dDay = localStorage.getItem('devDayOverride');
-    
-    const dDateInput = document.getElementById('dev-date');
-    const dTimeInput = document.getElementById('dev-time');
-    const dDayInput = document.getElementById('dev-day');
-    
-    if(dDate && dDateInput) dDateInput.value = dDate;
-    if(dTime && dTimeInput) dTimeInput.value = dTime;
-    if(dDay && dDayInput) dDayInput.value = dDay;
+    // Only used to populate UI fields if backend matches
+    // But actual time travel drives off the backend now
 }
 
-function applyDevSettings() {
+async function applyDevSettings() {
     const dateVal = document.getElementById('dev-date').value;
     const timeVal = document.getElementById('dev-time').value;
     const dayVal = document.getElementById('dev-day').value;
 
-    if (dateVal) localStorage.setItem('devDateOverride', dateVal);
-    else localStorage.removeItem('devDateOverride');
-
-    if (timeVal) localStorage.setItem('devTimeOverride', timeVal);
-    else localStorage.removeItem('devTimeOverride');
-
-    if (dayVal) localStorage.setItem('devDayOverride', dayVal);
-    else localStorage.removeItem('devDayOverride');
-
-    showMessage('dev-message', 'Time Travel Active! UI is updated. System Date Changed.', 'success');
+    let newOffset = 0;
     
-    if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-        renderDashboardSummary();
-        renderLogs();
-        renderSchedule();
-        renderMainDashboard();
-        renderDutyToday();
-        const secHist = document.getElementById('sec-history');
-        if (secHist && secHist.classList.contains('active')) renderHistoryView();
+    if (dateVal && timeVal) {
+        const targetDate = new Date(`${dateVal}T${timeVal}:00`);
+        const now = new Date();
+        newOffset = targetDate.getTime() - now.getTime();
+    } else if (dateVal || timeVal) {
+        alert("To simulate time, you must provide BOTH a Date and a Time.");
+        return;
+    }
+
+    try {
+        await fetch(`${API_BASE_URL}/config/time-travel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+            body: JSON.stringify({ 
+                timeOffset: newOffset,
+                dayOverride: dayVal || "" 
+            })
+        });
+        
+        globalTimeOffset = newOffset;
+        globalDayOverride = dayVal || "";
+        
+        showMessage('dev-message', 'Time Travel Active! System is ticking in simulated time.', 'success');
+        
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderDashboardSummary();
+            renderLogs();
+            renderSchedule();
+            renderMainDashboard();
+            renderDutyToday();
+            const secHist = document.getElementById('sec-history');
+            if (secHist && secHist.classList.contains('active')) renderHistoryView();
+        }
+    } catch(e) {
+        showMessage('dev-message', 'Network Error linking to backend.', 'error');
     }
 }
 
-function resetDevSettings() {
-    localStorage.removeItem('devDateOverride');
-    localStorage.removeItem('devTimeOverride');
-    localStorage.removeItem('devDayOverride');
-    
-    const dDate = document.getElementById('dev-date');
-    const dTime = document.getElementById('dev-time');
-    const dDay = document.getElementById('dev-day');
-    if(dDate) dDate.value = '';
-    if(dTime) dTime.value = '';
-    if(dDay) dDay.value = '';
-    
-    showMessage('dev-message', 'System reverted back to reality.', 'success');
-    
-    if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-        renderDashboardSummary();
-        renderLogs();
-        renderSchedule();
-        renderMainDashboard();
-        renderDutyToday();
-        const secHist = document.getElementById('sec-history');
-        if (secHist && secHist.classList.contains('active')) renderHistoryView();
+async function resetDevSettings() {
+    try {
+        await fetch(`${API_BASE_URL}/config/time-travel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+            body: JSON.stringify({ timeOffset: 0, dayOverride: "" })
+        });
+        
+        globalTimeOffset = 0;
+        globalDayOverride = "";
+        
+        const dDate = document.getElementById('dev-date');
+        const dTime = document.getElementById('dev-time');
+        const dDay = document.getElementById('dev-day');
+        if(dDate) dDate.value = '';
+        if(dTime) dTime.value = '';
+        if(dDay) dDay.value = '';
+        
+        showMessage('dev-message', 'System reverted back to reality.', 'success');
+        
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderDashboardSummary();
+            renderLogs();
+            renderSchedule();
+            renderMainDashboard();
+            renderDutyToday();
+            const secHist = document.getElementById('sec-history');
+            if (secHist && secHist.classList.contains('active')) renderHistoryView();
+        }
+    } catch(e) {
+        showMessage('dev-message', 'Network Error.', 'error');
     }
 }
 

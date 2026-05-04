@@ -245,6 +245,7 @@ let settingsClickCount = 0;
 let pendingExemptId = null;
 let pendingExemptDate = null;
 let pendingExemptCheckbox = null;
+let adminMathAns = 0; 
 
 function getShiftDateDetails() {
     const pht = getPHT();
@@ -479,13 +480,30 @@ function logoutAdmin() {
     switchView('student-view');
 }
 
+function generateAdminMathCaptcha() {
+    const n1 = Math.floor(Math.random() * 10) + 1;
+    const n2 = Math.floor(Math.random() * 10) + 1;
+    adminMathAns = n1 + n2;
+    const qEl = document.getElementById('admin-math-q');
+    if (qEl) qEl.textContent = `${n1} + ${n2}`;
+    const aEl = document.getElementById('admin-math-a');
+    if (aEl) aEl.value = '';
+}
+
 async function createAdminAccount() {
     if(!isAuthenticated()) return;
     const user = document.getElementById('new-admin-user').value.trim();
     const pass = document.getElementById('new-admin-pass').value.trim();
+    const mathInput = document.getElementById('admin-math-a').value.trim();
     
-    if(!user || !pass) {
+    if(!user || !pass || mathInput === "") {
         showMessage('acc-message', 'Please fill all fields', 'error');
+        return;
+    }
+
+    if(parseInt(mathInput) !== adminMathAns) {
+        showMessage('acc-message', 'Incorrect security math answer.', 'error');
+        generateAdminMathCaptcha();
         return;
     }
 
@@ -501,9 +519,11 @@ async function createAdminAccount() {
             showMessage('acc-message', 'Account created successfully!', 'success');
             document.getElementById('new-admin-user').value = '';
             document.getElementById('new-admin-pass').value = '';
+            generateAdminMathCaptcha(); 
             fetchAdminAccounts();
         } else {
             showMessage('acc-message', data.message, 'error');
+            generateAdminMathCaptcha(); 
         }
     } catch(err) {
         showMessage('acc-message', 'Server error connection to backend.', 'error');
@@ -551,7 +571,7 @@ async function deleteAdminAccount(user) {
         const data = await response.json();
         if(data.success) fetchAdminAccounts();
         else alert(data.message);
-    } catch(err) { alert('Server error connecting to backend.'); }
+    } catch(err) {}
 }
 
 async function generateRegistrationLink() {
@@ -863,17 +883,34 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
         details: endOfShiftDetails 
     };
 
-    try {
-        await fetch(`${API_BASE_URL}/logs`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newLog)
-        });
-    } catch (e) {}
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    let wasTombstoned = false;
+    
+    if(logs.some(l => l.id === 'SYS_DELETED_DATE' && l.date === dateStr)) {
+        logs = logs.filter(l => !(l.id === 'SYS_DELETED_DATE' && l.date === dateStr));
+        wasTombstoned = true;
+    }
 
-    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     logs.push(newLog);
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+
+    if (wasTombstoned) {
+         try {
+            await fetch(`${API_BASE_URL}/logs/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+                body: JSON.stringify(logs)
+            });
+         } catch(e) {}
+    } else {
+         try {
+            await fetch(`${API_BASE_URL}/logs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newLog)
+            });
+        } catch (e) {}
+    }
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
         renderLogs();
@@ -1095,15 +1132,28 @@ async function createManualHistoryDate() {
     const dateInput = prompt("Enter the date for the new History Card (e.g., 5/4/2026):");
     if (!dateInput || dateInput.trim() === "") return;
 
-    const dateStr = dateInput.trim();
+    let dateStr;
+    try {
+        const parsed = new Date(dateInput.trim());
+        if(isNaN(parsed)) throw new Error("");
+        dateStr = parsed.toLocaleDateString('en-US'); 
+    } catch(e) {
+        alert("Invalid date format. Please use M/D/YYYY (e.g., 5/4/2026).");
+        return;
+    }
     
     await pullFromCloud();
-    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
-    if (logs.some(l => l.date === dateStr && l.id !== 'SYS_DELETED_DATE')) {
+    const isTombstoned = logs.some(l => l.id === 'SYS_DELETED_DATE' && l.date === dateStr);
+    const hasActualLogs = logs.some(l => l.date === dateStr && l.id !== 'SYS_DELETED_DATE');
+
+    if (hasActualLogs && !isTombstoned) {
         alert("A card for this date already exists.");
         return;
     }
+
+    logs = logs.filter(l => !(l.id === 'SYS_DELETED_DATE' && l.date === dateStr));
 
     const initLog = {
         name: 'SYSTEM_INIT',
@@ -1118,11 +1168,19 @@ async function createManualHistoryDate() {
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     
     try {
-        await fetch(`${API_BASE_URL}/logs`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(initLog)
-        });
+        if (isTombstoned) {
+            await fetch(`${API_BASE_URL}/logs/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+                body: JSON.stringify(logs)
+            });
+        } else {
+            await fetch(`${API_BASE_URL}/logs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(initLog)
+            });
+        }
     } catch(e) {}
 
     renderHistoryView();
@@ -1454,8 +1512,7 @@ async function finalizeTimeOut() {
     }
 }
 
-function enforceHistoryLimit() {
-}
+function enforceHistoryLimit() {}
 
 function renderStudents() {
     if(!isAuthenticated()) return;
@@ -1640,6 +1697,7 @@ function switchAdminSection(sectionId, navElement) {
             openDevPasswordModal();
         }
         fetchAdminAccounts(); 
+        generateAdminMathCaptcha();
         checkBackendLockStatus(); 
     } else {
         settingsClickCount = 0; 

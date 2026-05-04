@@ -4,6 +4,7 @@ console.log("%cBawal ka dito panget", "color: white; background: red; font-size:
 const API_BASE_URL = "https://support-backend-ldos.onrender.com/api";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby5NWblcfFNB3_IaTWwV5JtNC6_bF_yKTJynQg0DaB1R6aqv97ps8PjZT63Z32bvjA/exec";
 
+// Secret Key to authenticate with the backend
 const ADMIN_SECRET_KEY = "SupportAdmin@2026"; 
 
 const isAuthenticated = function() {
@@ -379,8 +380,6 @@ document.addEventListener('DOMContentLoaded', () => {
 setInterval(async () => {
     await pullFromCloud(); 
     await checkBackendLockStatus(); 
-    
-    // ISSUE 1 FIX: Removed processPastShifts() entirely. The frontend shouldn't mutate history automatically.
     
     if (isAuthenticated()) {
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -1027,7 +1026,6 @@ async function applyExempt(type) {
         localStorage.setItem('attendanceLogs', JSON.stringify(logs));
         await pushLogsToCloud();
         
-        // ISSUE 2 FIX: Refetch specifically from API before rendering table
         renderHistoryTable(pendingExemptDate);
         renderMainDashboard();
     }
@@ -1071,7 +1069,6 @@ async function exemptAllForDate(dateStr) {
         let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
         const students = JSON.parse(localStorage.getItem('students')) || [];
 
-        // ISSUE 2 FIX: Target everyone SCHEDULED, not just everyone with logs
         const targetDateObj = new Date(dateStr);
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const targetDayStr = dayNames[targetDateObj.getDay()];
@@ -1129,17 +1126,12 @@ async function devClearLogs() {
         localStorage.setItem('attendanceLogs', JSON.stringify([]));
         localStorage.setItem('deletedDates', JSON.stringify([])); 
         
-        const wipeLog = [{ id: 'SYS_WIPE_LOGS', name: 'WIPED', action: 'WIPED', time: '', date: '', details: null }];
         try {
-            await fetch(`${API_BASE_URL}/logs/sync`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-Admin-Key': ADMIN_SECRET_KEY
-                },
-                body: JSON.stringify(wipeLog)
+            await fetch(`${API_BASE_URL}/logs/clear`, {
+                method: 'DELETE',
+                headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
             });
-        } catch(e) {}
+        } catch(e) { console.error("Cloud wipe failed"); }
         
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderLogs();
@@ -1163,21 +1155,17 @@ async function factoryReset() {
         
         if (verificationText === "RESET EVERYTHING") {
             
-            const wipePayload = [{ id: 'SYS_WIPE_ALL', name: 'WIPED', classLevel: '', gcHandle: '', assignedDays: [] }];
-            const wipeLog = [{ id: 'SYS_WIPE_ALL', name: 'WIPED', action: 'WIPED', time: '', date: '', details: null }];
-
             try {
-                await fetch(`${API_BASE_URL}/students/sync`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-                    body: JSON.stringify(wipePayload)
+                await fetch(`${API_BASE_URL}/students/factory-reset`, {
+                    method: 'DELETE',
+                    headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
                 });
-                await fetch(`${API_BASE_URL}/logs/sync`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-                    body: JSON.stringify(wipeLog)
+                
+                await fetch(`${API_BASE_URL}/logs/factory-reset`, {
+                    method: 'DELETE',
+                    headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
                 });
-            } catch(e) { console.error("Wipe push failed"); }
+            } catch(e) { console.error("Server-side wipe failed", e); }
 
             localStorage.clear();
             sessionStorage.clear();
@@ -2194,6 +2182,8 @@ function renderSchedule() {
         filteredStudents = filteredStudents.filter(s => !s.assignedDays || s.assignedDays.length === 0);
     } else if (filterVal === 'ASSIGNED') {
         filteredStudents = filteredStudents.filter(s => s.assignedDays && s.assignedDays.length > 0);
+    } else if (filterVal !== 'ALL') {
+        filteredStudents = filteredStudents.filter(s => s.assignedDays && s.assignedDays.includes(filterVal));
     }
 
     filteredStudents.sort((a, b) => {
@@ -2303,7 +2293,6 @@ function renderHistoryView() {
     if(tbl) tbl.style.display = 'none';
 }
 
-// ISSUE 2 FIX: Ensure History Table shows everyone scheduled
 async function renderHistoryTable(dateStr) {
     if(!isAuthenticated()) return;
     
@@ -2325,10 +2314,9 @@ async function renderHistoryTable(dateStr) {
     
     const tbody = document.getElementById('history-logs-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs from secure server...</td></tr>';
 
     try {
-        // Fetch specific date history from backend
         const response = await fetch(`${API_BASE_URL}/logs/history/${encodeURIComponent(dateStr)}`);
         let dayLogs = [];
         if (response.ok) {
@@ -2342,14 +2330,12 @@ async function renderHistoryTable(dateStr) {
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const targetDayStr = dayNames[targetDateObj.getDay()];
 
-        // Get everyone who was scheduled, PLUS anyone who logged in anyway
         const studentsToRender = validStudents.filter(student => {
             const isScheduled = student.assignedDays && student.assignedDays.includes(targetDayStr);
             const hasLogs = dayLogs.some(l => String(l.id) === String(student.id));
             return isScheduled || hasLogs;
         });
 
-        // Sort: Upperclassmen -> Freshmen -> Alphabetical
         studentsToRender.sort((a, b) => {
             const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
             const classB = (b.classLevel || 'zzzz').toLowerCase().trim();

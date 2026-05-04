@@ -545,6 +545,12 @@
                                 <span class="toggle-password" onclick="togglePasswordVisibility('new-admin-pass', this)">👁️</span>
                             </div>
 
+                            <label for="new-admin-role" style="color: var(--text-main); font-size: 0.85rem; font-weight: bold; margin-top: 10px; display: block;">Account Role</label>
+                            <select id="new-admin-role" style="margin-top: 5px; margin-bottom: 15px; width: 100%; padding: 10px; background: #1e2128; color: var(--text-main); border: 1px solid #334155; border-radius: 4px;">
+                                <option value="ADMIN">Support Head (Full Access)</option>
+                                <option value="VISITOR">Visitor (View Only Mode)</option>
+                            </select>
+
                             <div style="margin-top: 15px; display: flex; align-items: center; justify-content: space-between; background: #1e2128; padding: 10px 15px; border-radius: 4px; border: 1px solid #334155;">
                                 <span style="color: var(--text-muted); font-size: 13px;">Security Check: What is <strong id="admin-math-q" style="color: var(--accent);">0 + 0</strong>?</span>
                                 <input type="number" id="admin-math-a" style="margin: 0; width: 60px; padding: 5px; font-size: 13px; text-align: center;">

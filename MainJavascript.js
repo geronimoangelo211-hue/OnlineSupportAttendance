@@ -1697,7 +1697,7 @@ async function switchView(viewId) {
                 const displayUser = document.getElementById('display-username');
                 const displayRole = document.getElementById('display-role');
                 if (displayUser) displayUser.textContent = parsedTk.username || 'Admin';
-                if (displayRole) displayRole.textContent = parsedTk.role || 'ADMIN';
+                if (displayRole) displayRole.textContent = parsedTk.role === 'VISITOR' ? 'VISITOR' : 'ADMIN';
             }
         } catch(e) {}
         

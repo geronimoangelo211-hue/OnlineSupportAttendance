@@ -491,7 +491,7 @@ async function loginAdmin(event) {
 
         if (data.success) {
             const userRole = data.role || 'ADMIN'; 
-            const tokenPayload = btoa(JSON.stringify({ valid: true, timestamp: Date.now(), role: userRole }));
+            const tokenPayload = btoa(JSON.stringify({ valid: true, timestamp: Date.now(), role: userRole, username: usernameInput }));
             sessionStorage.setItem('_auth_tkn_x92', tokenPayload);
             
             switchView('admin-dashboard-view');
@@ -1689,6 +1689,17 @@ async function switchView(viewId) {
         const moh = document.getElementById('mobile-header');
         if(mh) mh.style.display = 'none';
         if(moh) moh.style.display = 'none';
+
+        try {
+            const tk = sessionStorage.getItem('_auth_tkn_x92');
+            if (tk) {
+                const parsedTk = JSON.parse(atob(tk));
+                const displayUser = document.getElementById('display-username');
+                const displayRole = document.getElementById('display-role');
+                if (displayUser) displayUser.textContent = parsedTk.username || 'Admin';
+                if (displayRole) displayRole.textContent = parsedTk.role || 'ADMIN';
+            }
+        } catch(e) {}
         
         enforceHistoryLimit();
         renderStudents();

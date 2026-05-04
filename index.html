@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="MainCSS.css">
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* CSS for the locked state overlay */
         .system-locked-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -31,7 +30,6 @@
             text-align: center;
         }
         
-        /* STRICT PANEL SIZING: Forces a perfect grid and stops panels from escaping screen */
         .dash-panel-standard {
             height: 360px !important; 
             min-height: 360px !important;
@@ -51,9 +49,29 @@
             padding: 10px 0;
             text-align: center;
         }
+
+        /* ISSUE 5 FIX: Password Eye Toggle Styles */
+        .password-container {
+            position: relative;
+            width: 100%;
+        }
+        .password-container input {
+            width: 100%;
+            padding-right: 40px; /* Make room for icon */
+        }
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            user-select: none;
+        }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;"> <!-- ISSUE 7 FIX: Disable Right Click -->
 
     <header id="main-header" class="desktop-header">
         <h2>Support Attendance System</h2>
@@ -125,7 +143,12 @@
         <div class="centered-panel">
             <h3>Support Head Login</h3>
             <input type="text" id="admin-user" placeholder="Username">
-            <input type="password" id="admin-pass" placeholder="Password">
+            
+            <!-- ISSUE 5 FIX: Password Eye Toggle -->
+            <div class="password-container">
+                <input type="password" id="admin-pass" placeholder="Password">
+                <span class="toggle-password" onclick="togglePasswordVisibility('admin-pass', this)">👁️</span>
+            </div>
             
             <div class="captcha-container" style="margin-top: 15px; margin-bottom: 15px;">
                 <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px;">Security Check (Case Sensitive - Click image to refresh)</p>
@@ -217,8 +240,8 @@
                                 </div>
                             </div>
                             
-                            <!-- Line Chart -->
-                            <div class="panel dash-panel-standard" style="padding: 25px;">
+                            <!-- Line Chart - ISSUE 6 FIX: Adjusted container height -->
+                            <div class="panel dash-panel-standard" style="padding: 25px; height: 400px !important; max-height: 400px !important;">
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-shrink: 0;">
                                     <h3 style="margin-top: 0; text-align: left;">Attendance Trend</h3>
                                     <div style="display: flex; gap: 12px; font-size: 11px; font-weight: bold;">
@@ -227,7 +250,7 @@
                                     </div>
                                 </div>
                                 <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px; flex-shrink: 0;">Hourly Logs (5:00 AM - 4:00 AM)</p>
-                                <div id="dash-line-chart-container" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative; min-height: 0;">
+                                <div id="dash-line-chart-container" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative; min-height: 0; padding-bottom: 20px;">
                                 </div>
                             </div>
 
@@ -273,7 +296,6 @@
                                 <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 13px; white-space: nowrap;">Monitor today's scheduled students and real-time logs.</p>
                             </div>
                             
-                            <!-- UPDATED: Sort Dropdown added to Search Bar -->
                             <div style="display: flex; gap: 10px; width: 100%; max-width: 500px;">
                                 <input type="text" id="search-attendance-global" placeholder="Search logs by Name or ID..." onkeyup="handleGlobalSearch()" style="margin: 0; flex: 1; padding: 10px 15px; font-size: 14px;">
                                 <select id="sort-attendance-global" onchange="handleGlobalSearch()" style="margin: 0; width: 150px; font-size: 13px;">
@@ -413,7 +435,6 @@
                             <option value="ASSIGNED">Assigned Schedule Only</option>
                         </select>
 
-                        <!-- UPDATED: Sort Dropdown for Schedules -->
                         <select id="sort-schedule" onchange="renderSchedule()" style="margin: 0; width: auto; font-size: 13px;">
                             <option value="NAME_ASC">Sort: Name (A-Z)</option>
                             <option value="NAME_DESC">Sort: Name (Z-A)</option>
@@ -444,19 +465,28 @@
 
             <div id="sec-history" class="admin-section">
                 <div class="panel" style="flex: 1;">
-                    <h3>Attendance History (12-Day Auto Archieve)</h3>
-                    <p class="placeholder-text" style="margin-top: 0;">Select a date card below to view past attendance logs. Records older than 12 days are automatically permanently deleted to save space.</p>
+                    <!-- ISSUE 4 FIX: Rearranged layout to put EXEMPT ALL beside Search -->
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3>Attendance History (12-Day Auto Archieve)</h3>
+                            <p class="placeholder-text" style="margin-top: 0;">Select a date card below to view past attendance logs.</p>
+                        </div>
+                    </div>
                     
-                    <input type="text" id="search-history-date" placeholder="🔍 Search Date (e.g. 5/2/2026)..." onkeyup="renderHistoryView()" style="margin-top: 15px; max-width: 300px;">
+                    <div style="display: flex; gap: 15px; align-items: center; margin-top: 15px;">
+                        <input type="text" id="search-history-date" placeholder="🔍 Search Date (e.g. 5/2/2026)..." onkeyup="renderHistoryView()" style="max-width: 300px; margin: 0;">
+                        <!-- Moved Exempt All button here -->
+                        <button id="history-exempt-all-btn" style="display: none; background: rgba(102, 252, 241, 0.1); color: #66fcf1; border: 1px solid #66fcf1; padding: 10px 20px; font-size: 12px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">EXEMPT ALL SHIFTS TODAY</button>
+                    </div>
 
-                    <div id="history-cards-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px; margin-bottom: 25px;">
+                    <div id="history-cards-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 25px; margin-bottom: 25px;">
                     </div>
 
                     <div id="history-table-container" style="display: none; flex-direction: column; flex: 1; min-height: 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 15px;">
                             <h4 id="history-table-title" style="color: var(--accent); margin: 0; font-size: 1.1rem;">Logs</h4>
                             <div style="display: flex; gap: 10px;">
-                                <button id="history-exempt-all-btn" style="background: rgba(102, 252, 241, 0.1); color: #66fcf1; border: 1px solid #66fcf1; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Exempt All</button>
+                                <!-- Exempt all removed from here -->
                                 <button id="history-sheet-btn" style="background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid #22c55e; padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Record Today Google Sheets</button>
                                 <button id="history-export-btn" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); border: 1px solid var(--accent); padding: 8px 15px; font-size: 11px; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase;">Export Excel</button>
                             </div>
@@ -492,7 +522,13 @@
                         
                         <div class="form-group" style="margin-top: 15px;">
                             <input type="text" id="new-admin-user" placeholder="New Username">
-                            <input type="password" id="new-admin-pass" placeholder="New Password">
+                            
+                            <!-- ISSUE 5 FIX: Password Eye Toggle -->
+                            <div class="password-container" style="margin-top: 10px;">
+                                <input type="password" id="new-admin-pass" placeholder="New Password">
+                                <span class="toggle-password" onclick="togglePasswordVisibility('new-admin-pass', this)">👁️</span>
+                            </div>
+
                             <button onclick="createAdminAccount()" class="btn-primary">CREATE ACCOUNT</button>
                         </div>
                         <p id="acc-message" class="message"></p>
@@ -751,7 +787,11 @@
             </h3>
             <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-bottom: 20px;">Restricted Area. Enter override password.</p>
             
-            <input type="password" id="dev-password-input" placeholder="Enter Developer Password" style="width: 100%; margin-bottom: 15px;">
+            <!-- ISSUE 5 FIX: Password Eye Toggle -->
+            <div class="password-container" style="margin-bottom: 15px;">
+                <input type="password" id="dev-password-input" placeholder="Enter Developer Password">
+                <span class="toggle-password" onclick="togglePasswordVisibility('dev-password-input', this)">👁️</span>
+            </div>
             
             <div style="display: flex; gap: 10px;">
                 <button class="btn-out" onclick="closeDevPasswordModal()" style="flex: 1; background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted);">Cancel</button>
@@ -762,5 +802,31 @@
     </div>
 
     <script src="MainJavascript.js"></script>
+    
+    <!-- ISSUE 7 FIX: Disable specific key combinations -->
+    <script>
+        document.addEventListener('keydown', function(e) {
+            // Prevent F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+            if (e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) || 
+                (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) || 
+                (e.ctrlKey && (e.key === 'U' || e.key === 'u'))) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // ISSUE 5 FIX: Logic for Password visibility toggle
+        function togglePasswordVisibility(inputId, iconElement) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                iconElement.textContent = '🔒'; 
+            } else {
+                input.type = 'password';
+                iconElement.textContent = '👁️'; 
+            }
+        }
+    </script>
 </body>
 </html>

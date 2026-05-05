@@ -602,7 +602,11 @@ async function fetchAdminAccounts() {
         const response = await fetch(`${API_BASE_URL}/accounts`, { cache: 'no-store' });
         const data = await response.json();
         list.innerHTML = '';
-        data.forEach(user => {
+        data.forEach(account => {
+            const user = account.username;
+            const role = account.role || 'ADMIN';
+            const lastOnlineText = timeSinceEpoch(account.lastOnline);
+
             const li = document.createElement('li');
             li.style.padding = '10px 15px';
             li.style.borderBottom = '1px solid #2d313c';
@@ -614,13 +618,39 @@ async function fetchAdminAccounts() {
                 ? `<button onclick="deleteAdminAccount('${user}')" class="remove-btn" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 4px 8px; font-size: 10px; cursor: pointer;">DELETE</button>` 
                 : `<span style="font-size: 10px; color: var(--text-muted);">DEFAULT</span>`;
 
-            li.innerHTML = `<span style="color: var(--text-main); font-weight: bold;">${user}</span> ${delBtn}`;
+            li.innerHTML = `
+                <div style="display: flex; flex-direction: column;">
+                    <span style="color: var(--text-main); font-weight: bold;">${user} <span style="font-size: 9px; color: var(--text-muted); background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; margin-left: 5px;">${role}</span></span>
+                    <span style="font-size: 10px; color: #f59e0b; margin-top: 3px;">Last Online: ${lastOnlineText}</span>
+                </div>
+                ${delBtn}
+            `;
             list.appendChild(li);
         });
         applyVisitorMode();
     } catch (err) {
         list.innerHTML = `<li style="color: var(--error); padding: 10px; text-align: center;">Unable to load accounts.</li>`;
     }
+}
+
+function timeSinceEpoch(epochMillis) {
+    if (!epochMillis) return "Never logged in";
+    const seconds = Math.floor((Date.now() - epochMillis) / 1000);
+    if (seconds < 0) return "Just now"; 
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " year(s) ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " month(s) ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "d ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "h ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "m ago";
+    
+    if (seconds < 10) return "Just now";
+    return Math.floor(seconds) + "s ago";
 }
 
 async function deleteAdminAccount(user) {

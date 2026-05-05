@@ -2522,57 +2522,70 @@ async function renderHistoryTable(dateStr) {
         const outExempted = timeOutLog && timeOutLog.action.includes('Exempted');
         const hasAnyExemption = inExempted || outExempted;
 
-        let inText = '<span style="color: var(--error);">Absent</span>';
-        let outText = '<span style="color: var(--error);">Absent</span>';
+        let inDisplayText = "Absent";
+        let inColor = "var(--error)";
+        let inValForInput = "";
+
+        if (inExempted) {
+            inDisplayText = "Exempted";
+            inColor = "#66fcf1";
+        } else if (timeInLog) {
+            inDisplayText = timeInLog.time.replace('Exempted', '').trim();
+            inValForInput = inDisplayText;
+            inColor = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+        } else if (noAttLog && !hasAnyExemption) {
+            inDisplayText = "No Attendance";
+        }
+
+        let inEditHtml = '';
+        if (userRole === 'ADMIN' && !inExempted) {
+            inEditHtml = `
+                <span id="display-time-in-${id}" style="color: ${inColor}; display: inline-flex; align-items: center;">${inDisplayText} <span onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span></span>
+                <div id="edit-box-in-${id}" style="display: none; align-items: center; gap: 5px;">
+                    <input type="text" id="input-time-in-${id}" class="edit-time-input" value="${inValForInput}" placeholder="HH:MM AM">
+                    <button onclick="saveEditedTime('${id}', '${dateStr}', 'IN')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
+                    <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
+                </div>
+            `;
+        } else {
+            inEditHtml = `<span style="color: ${inColor}; font-weight: bold;">${inDisplayText}</span>`;
+        }
+
+        let outDisplayText = "Absent";
+        let outColor = "var(--error)";
+        let outValForInput = "";
         let gc = '-';
         let ann = '-';
         let post = '-';
-        
-        let inEditIcon = '';
-        let outEditIcon = '';
 
-        if (userRole === 'ADMIN') {
-             inEditIcon = timeInLog && !inExempted ? `<span onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span>` : '';
-             outEditIcon = timeOutLog && !outExempted ? `<span onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span>` : '';
+        if (outExempted) {
+            outDisplayText = "Exempted";
+            outColor = "#66fcf1";
+        } else if (timeOutLog) {
+            outDisplayText = timeOutLog.time.replace('Exempted', '').trim();
+            outValForInput = outDisplayText;
+            outColor = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+            if (timeOutLog.details) {
+                gc = timeOutLog.details.gcHandle || '-';
+                ann = timeOutLog.details.announcement || '-';
+                post = timeOutLog.details.whoPosted || '-';
+            }
+        } else if (noAttLog && !hasAnyExemption) {
+            outDisplayText = "No Attendance";
         }
 
-        if (noAttLog && !hasAnyExemption) {
-            inText = '<span style="color: var(--error);">No Attendance</span>';
-            outText = '<span style="color: var(--error);">No Attendance</span>';
+        let outEditHtml = '';
+        if (userRole === 'ADMIN' && !outExempted) {
+            outEditHtml = `
+                <span id="display-time-out-${id}" style="color: ${outColor}; display: inline-flex; align-items: center;">${outDisplayText} <span onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span></span>
+                <div id="edit-box-out-${id}" style="display: none; align-items: center; gap: 5px;">
+                    <input type="text" id="input-time-out-${id}" class="edit-time-input" value="${outValForInput}" placeholder="HH:MM PM">
+                    <button onclick="saveEditedTime('${id}', '${dateStr}', 'OUT')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
+                    <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
+                </div>
+            `;
         } else {
-            if (inExempted) {
-                inText = '<span style="color: #66fcf1;">Exempted</span>';
-            } else if (timeInLog) {
-                const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-                const cleanTime = timeInLog.time.replace('Exempted', '').trim();
-                inText = `
-                    <span id="display-time-in-${id}" style="color: ${color}; display: inline-flex; align-items: center;">${cleanTime} ${inEditIcon}</span>
-                    <div id="edit-box-in-${id}" style="display: none; align-items: center; gap: 5px;">
-                        <input type="text" id="input-time-in-${id}" class="edit-time-input" value="${cleanTime}">
-                        <button onclick="saveEditedTime('${id}', '${dateStr}', 'IN')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
-                        <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
-                    </div>
-                `;
-            }
-
-            if (outExempted) {
-                outText = '<span style="color: #66fcf1;">Exempted</span>';
-            } else if (timeOutLog) {
-                const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-                const cleanTime = timeOutLog.time.replace('Exempted', '').trim();
-                outText = `
-                    <span id="display-time-out-${id}" style="color: ${color}; display: inline-flex; align-items: center;">${cleanTime} ${outEditIcon}</span>
-                    <div id="edit-box-out-${id}" style="display: none; align-items: center; gap: 5px;">
-                        <input type="text" id="input-time-out-${id}" class="edit-time-input" value="${cleanTime}">
-                        <button onclick="saveEditedTime('${id}', '${dateStr}', 'OUT')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
-                        <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
-                    </div>
-                `;
-                const details = timeOutLog.details || {};
-                gc = details.gcHandle || '-';
-                ann = details.announcement || '-';
-                post = details.whoPosted || '-';
-            }
+            outEditHtml = `<span style="color: ${outColor}; font-weight: bold;">${outDisplayText}</span>`;
         }
 
         const checkedAttr = hasAnyExemption ? 'checked' : '';
@@ -2581,8 +2594,8 @@ async function renderHistoryTable(dateStr) {
         tr.innerHTML = `
             <td>${name}</td>
             <td>${id}</td>
-            <td style="font-weight: bold;">${inText}</td>
-            <td style="font-weight: bold;">${outText}</td>
+            <td style="font-weight: bold;">${inEditHtml}</td>
+            <td style="font-weight: bold;">${outEditHtml}</td>
             <td style="color: var(--text-muted);">${gc}</td>
             <td style="color: var(--text-muted);">${ann}</td>
             <td style="color: var(--text-muted);">${post}</td>
@@ -3580,6 +3593,21 @@ function toggleTimeEdit(idNum, dateStr, type) {
     }
 }
 
+function toggleTimeEdit(idNum, dateStr, type) {
+    const displaySpan = document.getElementById(`display-time-${type.toLowerCase()}-${idNum}`);
+    const editBox = document.getElementById(`edit-box-${type.toLowerCase()}-${idNum}`);
+    
+    if (!displaySpan || !editBox) return;
+
+    if (editBox.style.display === 'none') {
+        displaySpan.style.display = 'none';
+        editBox.style.display = 'inline-flex';
+    } else {
+        displaySpan.style.display = 'inline-flex';
+        editBox.style.display = 'none';
+    }
+}
+
 async function saveEditedTime(idNum, dateStr, type) {
     if(!isAuthenticated()) return;
     const inputVal = document.getElementById(`input-time-${type.toLowerCase()}-${idNum}`).value.trim();
@@ -3597,24 +3625,45 @@ async function saveEditedTime(idNum, dateStr, type) {
 
     await pullFromCloud();
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const student = students.find(s => String(s.id) === String(idNum));
     
-    let foundLog = false;
-    logs.forEach(log => {
-        if (String(log.id) === String(idNum) && log.date === dateStr) {
-            if (type === 'IN' && log.action.includes('Time In') && !log.action.includes('Exempted')) {
-                log.time = inputVal.toUpperCase();
-                foundLog = true;
-            } else if (type === 'OUT' && log.action.includes('Time Out') && !log.action.includes('Exempted')) {
-                log.time = inputVal.toUpperCase();
-                foundLog = true;
-            }
-        }
-    });
+    if (!student) return;
 
-    if (foundLog) {
-        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-        await pushLogsToCloud();
-        renderHistoryTable(dateStr);
-        renderMainDashboard();
+    const timeMatch = inputVal.match(/(\d+):(\d+)\s+(AM|PM)/i);
+    let h = parseInt(timeMatch[1]);
+    const m = parseInt(timeMatch[2]);
+    const ampm = timeMatch[3].toUpperCase();
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+
+    let newAction = '';
+    if (type === 'IN') {
+        newAction = (h > 8 || (h === 8 && m >= 1)) ? 'Time In (Late)' : 'Time In';
+    } else {
+        newAction = (h >= 0 && h <= 4) ? 'Time Out (Late)' : 'Time Out';
     }
+
+    logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr && l.action === 'No Attendance'));
+
+    let existingLogIndex = logs.findIndex(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes(type === 'IN' ? 'Time In' : 'Time Out') && !l.action.includes('Exempted'));
+
+    if (existingLogIndex !== -1) {
+        logs[existingLogIndex].time = inputVal.toUpperCase();
+        logs[existingLogIndex].action = newAction;
+    } else {
+        logs.push({
+            name: student.name || 'Unknown',
+            id: student.id,
+            action: newAction,
+            time: inputVal.toUpperCase(),
+            date: dateStr,
+            details: type === 'OUT' ? { gcHandle: '-', announcement: '-', whoPosted: '-' } : null
+        });
+    }
+
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    await pushLogsToCloud();
+    renderHistoryTable(dateStr);
+    renderMainDashboard();
 }

@@ -614,7 +614,8 @@ async function fetchAdminAccounts() {
             li.style.justifyContent = 'space-between';
             li.style.alignItems = 'center';
             
-            let delBtn = user !== 'MainHeadAcc' 
+            // Protect ONLY the DEVELOPER account from showing the delete button
+            let delBtn = (user !== 'DEVELOPER') 
                 ? `<button onclick="deleteAdminAccount('${user}')" class="remove-btn" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 4px 8px; font-size: 10px; cursor: pointer;">DELETE</button>` 
                 : `<span style="font-size: 10px; color: var(--text-muted);">DEFAULT</span>`;
 

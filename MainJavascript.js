@@ -3629,14 +3629,14 @@ async function saveEditLogModal() {
     const ann = document.getElementById('edit-log-ann').value;
     const post = document.getElementById('edit-log-post').value;
 
-    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s(AM|PM)$/i;
+    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]:[0-5][0-9]\s(AM|PM)$/i;
     
     if (inVal && !timeRegex.test(inVal)) {
-        alert("Invalid Time In format. Use HH:MM AM/PM");
+        alert("Invalid Time In format. Use HH:MM:SS AM/PM (e.g., 05:00:00 AM)");
         return;
     }
     if (outVal && !timeRegex.test(outVal)) {
-        alert("Invalid Time Out format. Use HH:MM AM/PM");
+        alert("Invalid Time Out format. Use HH:MM:SS AM/PM (e.g., 05:00:00 PM)");
         return;
     }
 
@@ -3654,16 +3654,16 @@ async function saveEditLogModal() {
             name: student.name || 'Unknown',
             id: student.id,
             action: 'No Attendance',
-            time: '00:00 AM', 
+            time: '00:00:00 AM', 
             date: dateStr,
             details: null
         });
     } else {
         if (inVal) {
-            const timeMatch = inVal.match(/(\d+):(\d+)\s+(AM|PM)/i);
+            const timeMatch = inVal.match(/(\d+):(\d+):(\d+)\s+(AM|PM)/i);
             let h = parseInt(timeMatch[1]);
             const m = parseInt(timeMatch[2]);
-            const ampm = timeMatch[3].toUpperCase();
+            const ampm = timeMatch[4].toUpperCase();
             if (ampm === 'PM' && h !== 12) h += 12;
             if (ampm === 'AM' && h === 12) h = 0;
             
@@ -3680,9 +3680,9 @@ async function saveEditLogModal() {
         }
         
         if (outVal) {
-            const timeMatch = outVal.match(/(\d+):(\d+)\s+(AM|PM)/i);
+            const timeMatch = outVal.match(/(\d+):(\d+):(\d+)\s+(AM|PM)/i);
             let h = parseInt(timeMatch[1]);
-            const ampm = timeMatch[3].toUpperCase();
+            const ampm = timeMatch[4].toUpperCase();
             if (ampm === 'PM' && h !== 12) h += 12;
             if (ampm === 'AM' && h === 12) h = 0;
             

@@ -48,7 +48,7 @@ function applyVisitorMode() {
     } catch(e) {}
 
     if (userRole === 'VISITOR') {
-        document.querySelectorAll('.remove-btn, .history-trash-btn, button[onclick^="openEditStudentModal"]').forEach(btn => {
+        document.querySelectorAll('.remove-btn, .history-trash-btn, button[onclick^="openEditStudentModal"], .admin-edit-icon').forEach(btn => {
             btn.style.display = 'none';
         });
 
@@ -2423,6 +2423,10 @@ function renderHistoryView() {
 async function renderHistoryTable(dateStr) {
     if(!isAuthenticated()) return;
     
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    let userRole = 'ADMIN';
+    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+    
     const container = document.getElementById('history-table-container');
     const title = document.getElementById('history-table-title');
     if(container) container.style.display = 'flex';
@@ -2523,6 +2527,14 @@ async function renderHistoryTable(dateStr) {
         let gc = '-';
         let ann = '-';
         let post = '-';
+        
+        let inEditIcon = '';
+        let outEditIcon = '';
+
+        if (userRole === 'ADMIN') {
+             inEditIcon = timeInLog && !inExempted ? `<span onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span>` : '';
+             outEditIcon = timeOutLog && !outExempted ? `<span onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span>` : '';
+        }
 
         if (noAttLog && !hasAnyExemption) {
             inText = '<span style="color: var(--error);">No Attendance</span>';
@@ -2532,14 +2544,30 @@ async function renderHistoryTable(dateStr) {
                 inText = '<span style="color: #66fcf1;">Exempted</span>';
             } else if (timeInLog) {
                 const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-                inText = `<span style="color: ${color};">${timeInLog.time}</span>`;
+                const cleanTime = timeInLog.time.replace('Exempted', '').trim();
+                inText = `
+                    <span id="display-time-in-${id}" style="color: ${color}; display: inline-flex; align-items: center;">${cleanTime} ${inEditIcon}</span>
+                    <div id="edit-box-in-${id}" style="display: none; align-items: center; gap: 5px;">
+                        <input type="text" id="input-time-in-${id}" class="edit-time-input" value="${cleanTime}">
+                        <button onclick="saveEditedTime('${id}', '${dateStr}', 'IN')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
+                        <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
+                    </div>
+                `;
             }
 
             if (outExempted) {
                 outText = '<span style="color: #66fcf1;">Exempted</span>';
             } else if (timeOutLog) {
                 const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-                outText = `<span style="color: ${color};">${timeOutLog.time}</span>`;
+                const cleanTime = timeOutLog.time.replace('Exempted', '').trim();
+                outText = `
+                    <span id="display-time-out-${id}" style="color: ${color}; display: inline-flex; align-items: center;">${cleanTime} ${outEditIcon}</span>
+                    <div id="edit-box-out-${id}" style="display: none; align-items: center; gap: 5px;">
+                        <input type="text" id="input-time-out-${id}" class="edit-time-input" value="${cleanTime}">
+                        <button onclick="saveEditedTime('${id}', '${dateStr}', 'OUT')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
+                        <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
+                    </div>
+                `;
                 const details = timeOutLog.details || {};
                 gc = details.gcHandle || '-';
                 ann = details.announcement || '-';
@@ -3534,4 +3562,59 @@ async function isIncognito() {
             resolve(false);
         }
     });
+}
+
+
+function toggleTimeEdit(idNum, dateStr, type) {
+    const displaySpan = document.getElementById(`display-time-${type.toLowerCase()}-${idNum}`);
+    const editBox = document.getElementById(`edit-box-${type.toLowerCase()}-${idNum}`);
+    
+    if (!displaySpan || !editBox) return;
+
+    if (editBox.style.display === 'none') {
+        displaySpan.style.display = 'none';
+        editBox.style.display = 'inline-flex';
+    } else {
+        displaySpan.style.display = 'inline-flex';
+        editBox.style.display = 'none';
+    }
+}
+
+async function saveEditedTime(idNum, dateStr, type) {
+    if(!isAuthenticated()) return;
+    const inputVal = document.getElementById(`input-time-${type.toLowerCase()}-${idNum}`).value.trim();
+    
+    if(!inputVal) {
+        alert("Time cannot be empty.");
+        return;
+    }
+
+    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s(AM|PM)$/i;
+    if(!timeRegex.test(inputVal)) {
+        alert("Invalid format. Please use HH:MM AM/PM (e.g., 05:30 AM or 12:45 PM).");
+        return;
+    }
+
+    await pullFromCloud();
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    
+    let foundLog = false;
+    logs.forEach(log => {
+        if (String(log.id) === String(idNum) && log.date === dateStr) {
+            if (type === 'IN' && log.action.includes('Time In') && !log.action.includes('Exempted')) {
+                log.time = inputVal.toUpperCase();
+                foundLog = true;
+            } else if (type === 'OUT' && log.action.includes('Time Out') && !log.action.includes('Exempted')) {
+                log.time = inputVal.toUpperCase();
+                foundLog = true;
+            }
+        }
+    });
+
+    if (foundLog) {
+        localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+        await pushLogsToCloud();
+        renderHistoryTable(dateStr);
+        renderMainDashboard();
+    }
 }

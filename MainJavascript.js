@@ -3602,8 +3602,8 @@ function openEditLogModal(idNum, dateStr) {
         gcOther.value = gc;
     }
 
-    document.querySelectorAll('input[name="edit-log-ann"]').forEach(r => r.checked = (r.value === ann));
-    document.querySelectorAll('input[name="edit-log-post"]').forEach(r => r.checked = (r.value === post));
+    document.getElementById('edit-log-ann').value = ann;
+    document.getElementById('edit-log-post').value = post;
 
     document.getElementById('edit-log-modal').style.display = 'flex';
 }
@@ -3626,11 +3626,8 @@ async function saveEditLogModal() {
         gcHandle = document.getElementById('edit-log-gc-other').value.trim() || '-';
     }
     
-    const annRadio = document.querySelector('input[name="edit-log-ann"]:checked');
-    const postRadio = document.querySelector('input[name="edit-log-post"]:checked');
-    
-    const ann = annRadio ? annRadio.value : '-';
-    const post = postRadio ? postRadio.value : '-';
+    const ann = document.getElementById('edit-log-ann').value;
+    const post = document.getElementById('edit-log-post').value;
 
     const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s(AM|PM)$/i;
     

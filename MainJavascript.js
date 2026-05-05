@@ -2522,83 +2522,51 @@ async function renderHistoryTable(dateStr) {
         const outExempted = timeOutLog && timeOutLog.action.includes('Exempted');
         const hasAnyExemption = inExempted || outExempted;
 
-        let inDisplayText = "Absent";
-        let inColor = "var(--error)";
-        let inValForInput = "";
-
-        if (inExempted) {
-            inDisplayText = "Exempted";
-            inColor = "#66fcf1";
-        } else if (timeInLog) {
-            inDisplayText = timeInLog.time.replace('Exempted', '').trim();
-            inValForInput = inDisplayText;
-            inColor = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-        } else if (noAttLog && !hasAnyExemption) {
-            inDisplayText = "No Attendance";
-        }
-
-        let inEditHtml = '';
-        if (userRole === 'ADMIN' && !inExempted) {
-            inEditHtml = `
-                <span id="display-time-in-${id}" style="color: ${inColor}; display: inline-flex; align-items: center;">${inDisplayText} <span onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span></span>
-                <div id="edit-box-in-${id}" style="display: none; align-items: center; gap: 5px;">
-                    <input type="text" id="input-time-in-${id}" class="edit-time-input" value="${inValForInput}" placeholder="HH:MM AM">
-                    <button onclick="saveEditedTime('${id}', '${dateStr}', 'IN')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
-                    <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'IN')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
-                </div>
-            `;
-        } else {
-            inEditHtml = `<span style="color: ${inColor}; font-weight: bold;">${inDisplayText}</span>`;
-        }
-
-        let outDisplayText = "Absent";
-        let outColor = "var(--error)";
-        let outValForInput = "";
+        let inText = '<span style="color: var(--error);">Absent</span>';
+        let outText = '<span style="color: var(--error);">Absent</span>';
         let gc = '-';
         let ann = '-';
         let post = '-';
 
-        if (outExempted) {
-            outDisplayText = "Exempted";
-            outColor = "#66fcf1";
-        } else if (timeOutLog) {
-            outDisplayText = timeOutLog.time.replace('Exempted', '').trim();
-            outValForInput = outDisplayText;
-            outColor = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
-            if (timeOutLog.details) {
-                gc = timeOutLog.details.gcHandle || '-';
-                ann = timeOutLog.details.announcement || '-';
-                post = timeOutLog.details.whoPosted || '-';
-            }
-        } else if (noAttLog && !hasAnyExemption) {
-            outDisplayText = "No Attendance";
-        }
-
-        let outEditHtml = '';
-        if (userRole === 'ADMIN' && !outExempted) {
-            outEditHtml = `
-                <span id="display-time-out-${id}" style="color: ${outColor}; display: inline-flex; align-items: center;">${outDisplayText} <span onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="cursor: pointer; opacity: 0.5; margin-left: 8px;" class="admin-edit-icon">✏️</span></span>
-                <div id="edit-box-out-${id}" style="display: none; align-items: center; gap: 5px;">
-                    <input type="text" id="input-time-out-${id}" class="edit-time-input" value="${outValForInput}" placeholder="HH:MM PM">
-                    <button onclick="saveEditedTime('${id}', '${dateStr}', 'OUT')" style="background: var(--success); color: #000; border: none; padding: 4px; border-radius: 3px; cursor: pointer; font-size: 10px;">✔</button>
-                    <button onclick="toggleTimeEdit('${id}', '${dateStr}', 'OUT')" style="background: transparent; color: var(--error); border: 1px solid var(--error); padding: 3px; border-radius: 3px; cursor: pointer; font-size: 10px;">✖</button>
-                </div>
-            `;
+        if (noAttLog && !hasAnyExemption) {
+            inText = '<span style="color: var(--error);">No Attendance</span>';
+            outText = '<span style="color: var(--error);">No Attendance</span>';
         } else {
-            outEditHtml = `<span style="color: ${outColor}; font-weight: bold;">${outDisplayText}</span>`;
+            if (inExempted) {
+                inText = '<span style="color: #66fcf1;">Exempted</span>';
+            } else if (timeInLog) {
+                const color = timeInLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+                const cleanTime = timeInLog.time.replace('Exempted', '').trim();
+                inText = `<span style="color: ${color};">${cleanTime}</span>`;
+            }
+
+            if (outExempted) {
+                outText = '<span style="color: #66fcf1;">Exempted</span>';
+            } else if (timeOutLog) {
+                const color = timeOutLog.action.includes('Late') ? '#f59e0b' : 'var(--success)';
+                const cleanTime = timeOutLog.time.replace('Exempted', '').trim();
+                outText = `<span style="color: ${color};">${cleanTime}</span>`;
+                
+                const details = timeOutLog.details || {};
+                gc = details.gcHandle || '-';
+                ann = details.announcement || '-';
+                post = details.whoPosted || '-';
+            }
         }
 
         const checkedAttr = hasAnyExemption ? 'checked' : '';
+        const editActionHtml = userRole === 'ADMIN' ? `<span onclick="openEditLogModal('${id}', '${dateStr}')" style="cursor: pointer; opacity: 0.8;" class="admin-edit-icon">✏️</span>` : '';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${name}</td>
             <td>${id}</td>
-            <td style="font-weight: bold;">${inEditHtml}</td>
-            <td style="font-weight: bold;">${outEditHtml}</td>
+            <td style="font-weight: bold;">${inText}</td>
+            <td style="font-weight: bold;">${outText}</td>
             <td style="color: var(--text-muted);">${gc}</td>
             <td style="color: var(--text-muted);">${ann}</td>
             <td style="color: var(--text-muted);">${post}</td>
+            <td style="text-align: center;">${editActionHtml}</td>
             <td style="text-align: center;"><input type="checkbox" onchange="toggleExempt('${id}', '${dateStr}', this)" ${checkedAttr} style="margin: 0 auto; display: block; cursor: pointer;"></td>
         `;
         tbody.appendChild(tr);
@@ -3578,48 +3546,100 @@ async function isIncognito() {
 }
 
 
-function toggleTimeEdit(idNum, dateStr, type) {
-    const displaySpan = document.getElementById(`display-time-${type.toLowerCase()}-${idNum}`);
-    const editBox = document.getElementById(`edit-box-${type.toLowerCase()}-${idNum}`);
-    
-    if (!displaySpan || !editBox) return;
-
-    if (editBox.style.display === 'none') {
-        displaySpan.style.display = 'none';
-        editBox.style.display = 'inline-flex';
+function toggleEditLogOtherGC(val) {
+    const otherInput = document.getElementById('edit-log-gc-other');
+    if (val === 'Other') {
+        otherInput.style.display = 'block';
     } else {
-        displaySpan.style.display = 'inline-flex';
-        editBox.style.display = 'none';
+        otherInput.style.display = 'none';
+        otherInput.value = '';
     }
 }
 
-function toggleTimeEdit(idNum, dateStr, type) {
-    const displaySpan = document.getElementById(`display-time-${type.toLowerCase()}-${idNum}`);
-    const editBox = document.getElementById(`edit-box-${type.toLowerCase()}-${idNum}`);
-    
-    if (!displaySpan || !editBox) return;
+function openEditLogModal(idNum, dateStr) {
+    document.getElementById('edit-log-id').value = idNum;
+    document.getElementById('edit-log-date').value = dateStr;
 
-    if (editBox.style.display === 'none') {
-        displaySpan.style.display = 'none';
-        editBox.style.display = 'inline-flex';
-    } else {
-        displaySpan.style.display = 'inline-flex';
-        editBox.style.display = 'none';
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const studentLogs = logs.filter(l => String(l.id) === String(idNum) && l.date === dateStr);
+
+    const timeInLog = studentLogs.find(l => l.action.includes('Time In'));
+    const timeOutLog = studentLogs.find(l => l.action.includes('Time Out'));
+
+    let inTime = '';
+    if (timeInLog && !timeInLog.action.includes('Exempted')) {
+        inTime = timeInLog.time;
     }
+
+    let outTime = '';
+    let gc = '-';
+    let ann = '-';
+    let post = '-';
+
+    if (timeOutLog && !timeOutLog.action.includes('Exempted')) {
+        outTime = timeOutLog.time;
+        if (timeOutLog.details) {
+            gc = timeOutLog.details.gcHandle || '-';
+            ann = timeOutLog.details.announcement || '-';
+            post = timeOutLog.details.whoPosted || '-';
+        }
+    }
+
+    document.getElementById('edit-log-in').value = inTime;
+    document.getElementById('edit-log-out').value = outTime;
+
+    const gcSelect = document.getElementById('edit-log-gc');
+    const gcOther = document.getElementById('edit-log-gc-other');
+    
+    const knownGCs = ["-", "BSA", "BSIT", "BSED ENG", "BSPT", "BSHM", "BSTM", "BSCRIM", "BSPHARMA", "BSRESPI", "BSED FIL", "BSN", "BSPSYCH", "RAD", "BSRADTECH", "BEED", "BSBA-FM", "BSBA-MM", "BSMT"];
+    if (knownGCs.includes(gc)) {
+        gcSelect.value = gc;
+        gcOther.style.display = 'none';
+        gcOther.value = '';
+    } else {
+        gcSelect.value = 'Other';
+        gcOther.style.display = 'block';
+        gcOther.value = gc;
+    }
+
+    document.querySelectorAll('input[name="edit-log-ann"]').forEach(r => r.checked = (r.value === ann));
+    document.querySelectorAll('input[name="edit-log-post"]').forEach(r => r.checked = (r.value === post));
+
+    document.getElementById('edit-log-modal').style.display = 'flex';
 }
 
-async function saveEditedTime(idNum, dateStr, type) {
+function closeEditLogModal() {
+    document.getElementById('edit-log-modal').style.display = 'none';
+}
+
+async function saveEditLogModal() {
     if(!isAuthenticated()) return;
-    const inputVal = document.getElementById(`input-time-${type.toLowerCase()}-${idNum}`).value.trim();
+
+    const idNum = document.getElementById('edit-log-id').value;
+    const dateStr = document.getElementById('edit-log-date').value;
     
-    if(!inputVal) {
-        alert("Time cannot be empty.");
-        return;
+    const inVal = document.getElementById('edit-log-in').value.trim();
+    const outVal = document.getElementById('edit-log-out').value.trim();
+    
+    let gcHandle = document.getElementById('edit-log-gc').value;
+    if (gcHandle === 'Other') {
+        gcHandle = document.getElementById('edit-log-gc-other').value.trim() || '-';
     }
+    
+    const annRadio = document.querySelector('input[name="edit-log-ann"]:checked');
+    const postRadio = document.querySelector('input[name="edit-log-post"]:checked');
+    
+    const ann = annRadio ? annRadio.value : '-';
+    const post = postRadio ? postRadio.value : '-';
 
     const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s(AM|PM)$/i;
-    if(!timeRegex.test(inputVal)) {
-        alert("Invalid format. Please use HH:MM AM/PM (e.g., 05:30 AM or 12:45 PM).");
+    
+    if (inVal && !timeRegex.test(inVal)) {
+        alert("Invalid Time In format. Use HH:MM AM/PM");
+        return;
+    }
+    if (outVal && !timeRegex.test(outVal)) {
+        alert("Invalid Time Out format. Use HH:MM AM/PM");
         return;
     }
 
@@ -3630,40 +3650,61 @@ async function saveEditedTime(idNum, dateStr, type) {
     
     if (!student) return;
 
-    const timeMatch = inputVal.match(/(\d+):(\d+)\s+(AM|PM)/i);
-    let h = parseInt(timeMatch[1]);
-    const m = parseInt(timeMatch[2]);
-    const ampm = timeMatch[3].toUpperCase();
-    if (ampm === 'PM' && h !== 12) h += 12;
-    if (ampm === 'AM' && h === 12) h = 0;
+    logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr));
 
-    let newAction = '';
-    if (type === 'IN') {
-        newAction = (h > 8 || (h === 8 && m >= 1)) ? 'Time In (Late)' : 'Time In';
-    } else {
-        newAction = (h >= 0 && h <= 4) ? 'Time Out (Late)' : 'Time Out';
-    }
-
-    logs = logs.filter(l => !(String(l.id) === String(idNum) && l.date === dateStr && l.action === 'No Attendance'));
-
-    let existingLogIndex = logs.findIndex(l => String(l.id) === String(idNum) && l.date === dateStr && l.action.includes(type === 'IN' ? 'Time In' : 'Time Out') && !l.action.includes('Exempted'));
-
-    if (existingLogIndex !== -1) {
-        logs[existingLogIndex].time = inputVal.toUpperCase();
-        logs[existingLogIndex].action = newAction;
-    } else {
+    if (!inVal && !outVal) {
         logs.push({
             name: student.name || 'Unknown',
             id: student.id,
-            action: newAction,
-            time: inputVal.toUpperCase(),
+            action: 'No Attendance',
+            time: '00:00 AM', 
             date: dateStr,
-            details: type === 'OUT' ? { gcHandle: '-', announcement: '-', whoPosted: '-' } : null
+            details: null
         });
+    } else {
+        if (inVal) {
+            const timeMatch = inVal.match(/(\d+):(\d+)\s+(AM|PM)/i);
+            let h = parseInt(timeMatch[1]);
+            const m = parseInt(timeMatch[2]);
+            const ampm = timeMatch[3].toUpperCase();
+            if (ampm === 'PM' && h !== 12) h += 12;
+            if (ampm === 'AM' && h === 12) h = 0;
+            
+            const newAction = (h > 8 || (h === 8 && m >= 1)) ? 'Time In (Late)' : 'Time In';
+            
+            logs.push({
+                name: student.name || 'Unknown',
+                id: student.id,
+                action: newAction,
+                time: inVal.toUpperCase(),
+                date: dateStr,
+                details: null
+            });
+        }
+        
+        if (outVal) {
+            const timeMatch = outVal.match(/(\d+):(\d+)\s+(AM|PM)/i);
+            let h = parseInt(timeMatch[1]);
+            const ampm = timeMatch[3].toUpperCase();
+            if (ampm === 'PM' && h !== 12) h += 12;
+            if (ampm === 'AM' && h === 12) h = 0;
+            
+            const newAction = (h >= 0 && h <= 4) ? 'Time Out (Late)' : 'Time Out';
+
+            logs.push({
+                name: student.name || 'Unknown',
+                id: student.id,
+                action: newAction,
+                time: outVal.toUpperCase(),
+                date: dateStr,
+                details: { gcHandle: gcHandle, announcement: ann, whoPosted: post }
+            });
+        }
     }
 
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     await pushLogsToCloud();
     renderHistoryTable(dateStr);
     renderMainDashboard();
+    closeEditLogModal();
 }

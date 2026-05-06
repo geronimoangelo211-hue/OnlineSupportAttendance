@@ -128,20 +128,28 @@ async function checkBackendLockStatus() {
 
 async function toggleAttendanceState(checkbox) {
     if(!isAuthenticated()) return;
-    const isLocked = checkbox.checked;
     
-    const config = { locked: isLocked };
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    let userRole = 'ADMIN';
+    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+    
+    if (userRole === 'VISITOR') {
+        checkbox.checked = !checkbox.checked; // Revert visually
+        alert("Access Denied: Only Support Heads (Admins) can change system settings.");
+        return;
+    }
+
+    const isLocked = checkbox.checked;
+    let config;
+    try { config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false,"regOpen":false}'); } 
+    catch(e) { config = { locked: false, regOpen: false }; }
+    
+    config.locked = isLocked;
     localStorage.setItem('sys_config', JSON.stringify(config));
     
-    lastConfigPushTime = Date.now();
-    
+    lastDataPushTime = Date.now();
     applySystemConfig();
-    
-    try {
-        await pushLogsToCloud();
-    } catch (e) {
-        console.error("Failed to push lock state to cloud");
-    }
+    try { await pushLogsToCloud(); } catch (e) { console.error("Failed to push lock state to cloud"); }
 }
 
 function applyUIRestrictions() {
@@ -236,10 +244,15 @@ async function pushStudentsToCloud() {
     } catch (err) {}
 }
 
+let lastDataPushTime = 0;
+
 async function pushLogsToCloud() {
     const studentsData = localStorage.getItem('students') || "[]";
     const logsData = localStorage.getItem('attendanceLogs') || "[]";
-    const configData = localStorage.getItem('sys_config') || '{"locked":false}'; // SYNC SETTINGS
+    const configData = localStorage.getItem('sys_config') || '{"locked":false,"regOpen":false}';
+    
+    // Lock the sync engine for 5 seconds so old data doesn't overwrite your edits
+    lastDataPushTime = Date.now(); 
     
     try {
         await fetch(`${API_BASE_URL}/sync/push`, {
@@ -253,6 +266,38 @@ async function pushLogsToCloud() {
         });
     } catch (e) {
         console.error("Cloud push failed.", e);
+    }
+}
+
+async function pullFromCloud() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/sync/pull`);
+        if (response.ok) {
+            const data = await response.json();
+            
+            const serverHasStudents = (data.students && data.students !== "[]" && data.students !== "null");
+            const serverHasLogs = (data.logs && data.logs !== "[]" && data.logs !== "null");
+
+            const localStudents = localStorage.getItem('students');
+            const localLogs = localStorage.getItem('attendanceLogs');
+
+            if (!serverHasStudents && !serverHasLogs && (localStudents || localLogs)) {
+                await pushLogsToCloud();
+                return; 
+            }
+
+            if (Date.now() - lastDataPushTime > 5000) {
+                if (serverHasStudents) localStorage.setItem('students', data.students);
+                if (serverHasLogs) localStorage.setItem('attendanceLogs', data.logs);
+                
+                if (data.config && data.config !== "{}" && data.config !== "null") {
+                    localStorage.setItem('sys_config', data.config);
+                    applySystemConfig(); 
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Cloud pull failed.", e);
     }
 }
 
@@ -668,14 +713,6 @@ async function generateRegistrationLink() {
     }
 }
 
-function copyRegLink() {
-    if(!isAuthenticated()) return;
-    const linkInput = document.getElementById('reg-link-output');
-    linkInput.select();
-    document.execCommand("copy");
-    alert("Secure link copied! Send this to the students.");
-}
-
 async function createStudent() {
     if(!isAuthenticated()) return;
     const nameInput = document.getElementById('new-student-name').value.trim();
@@ -885,7 +922,6 @@ async function saveStudentEdit() {
     localStorage.setItem('students', JSON.stringify(students));
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     
-    // FIX: Push changes to backend instantly
     await pushLogsToCloud();
     
     closeEditStudentModal();
@@ -899,28 +935,24 @@ async function saveStudentEdit() {
 
 async function deleteStudent(idNum) {
     if(!isAuthenticated()) return;
-    if (!confirm("Are you sure you want to remove this student? This will not delete their existing logs but will prevent them from logging in.")) return;
+    if (!confirm("Are you sure you want to permanently delete this student?")) return;
     
-    await pullFromCloud();
     let students = JSON.parse(localStorage.getItem('students')) || [];
     students = students.filter(s => String(s.id) !== String(idNum));
     localStorage.setItem('students', JSON.stringify(students));
-    await pushStudentsToCloud(); 
-    
-    const searchStudInput = document.getElementById('search-student');
-    if (searchStudInput && searchStudInput.value.trim() !== '') {
-        searchStudents();
-    } else {
-        renderStudents();
-    }
 
-    if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-        renderSchedule(); 
-        renderMainDashboard();
-        renderDashboardSummary();
-        renderLogs();
-        renderDutyToday();
-    }
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    logs = logs.filter(l => String(l.id) !== String(idNum));
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+
+    try { await pushLogsToCloud(); } catch(e){} 
+    
+    if (document.getElementById('sec-data') && document.getElementById('sec-data').classList.contains('active')) renderStudents();
+    if (document.getElementById('sec-schedule') && document.getElementById('sec-schedule').classList.contains('active')) renderSchedule();
+    if (document.getElementById('sec-dashboard') && document.getElementById('sec-dashboard').classList.contains('active')) renderDashboardSummary();
+    
+    const dateStr = document.getElementById('history-table-title')?.getAttribute('data-date');
+    if (dateStr && document.getElementById('sec-history') && document.getElementById('sec-history').classList.contains('active')) renderHistoryTable(dateStr);
 }
 
 async function toggleAssignedDay(studentId, dayStr, btnElement) {
@@ -1622,6 +1654,8 @@ function renderStudents() {
             <div style="display: flex; gap: 5px;">
                 <button class="edit-btn" onclick="openEditStudentModal('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">EDIT</button>
                 <button onclick="viewPerformance('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); cursor: pointer;">VIEW PERF</button>
+                <!-- NEW: Remove Button added to Data tab -->
+                <button class="remove-btn" onclick="deleteStudent('${safeId}')" style="background: rgba(239, 68, 68, 0.1); color: var(--error); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--error); cursor: pointer;">REMOVE</button>
             </div>
         `;
         list.appendChild(li);
@@ -3846,42 +3880,81 @@ async function autoRestoreServerData() {
     }
 }
 
+async function toggleRegistrationState(checkbox) {
+    if(!isAuthenticated()) return;
+    
+    // FIX: Strict Admin Role Check
+    let tk = sessionStorage.getItem('_auth_tkn_x92');
+    let userRole = 'ADMIN';
+    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+    
+    if (userRole === 'VISITOR') {
+        checkbox.checked = !checkbox.checked; // Revert visually
+        alert("Access Denied: Only Support Heads (Admins) can change system settings.");
+        return;
+    }
+
+    const isOpen = checkbox.checked;
+    let config;
+    try { config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false,"regOpen":false}'); } 
+    catch(e) { config = { locked: false, regOpen: false }; }
+    
+    config.regOpen = isOpen;
+    localStorage.setItem('sys_config', JSON.stringify(config));
+    
+    lastDataPushTime = Date.now();
+    applySystemConfig();
+    try { await pushLogsToCloud(); } catch(e) { console.error("Failed to sync registration state."); }
+}
+
+function copyRegLink() {
+    if(!isAuthenticated()) return;
+    const linkInput = document.getElementById('reg-link-output');
+    if (!linkInput) return;
+    linkInput.select();
+    document.execCommand("copy");
+    alert("Permanent Registration Link copied to clipboard! Send this to the students.");
+}
+
 function applySystemConfig() {
     let config;
     try {
-        config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false}');
+        config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false,"regOpen":false}');
     } catch(e) {
-        config = { locked: false };
+        config = { locked: false, regOpen: false };
     }
 
-    const isLocked = config.locked;
-    
-    // 1. Update the Toggle Switch visually (Move Knob and Change Color)
     const toggle = document.getElementById('sys-attendance-toggle');
     const lockKnob = document.getElementById('sys-toggle-knob');
-    if (toggle) toggle.checked = isLocked;
+    if (toggle) toggle.checked = config.locked;
     if (lockKnob) {
-        lockKnob.style.transform = isLocked ? 'translateX(20px)' : 'translateX(0px)';
-        lockKnob.parentElement.style.backgroundColor = isLocked ? 'var(--error)' : '#334155';
+        lockKnob.style.transform = config.locked ? 'translateX(20px)' : 'translateX(0px)';
+        lockKnob.parentElement.style.backgroundColor = config.locked ? 'var(--error)' : '#334155';
     }
     
-    // 2. Show/Hide the Lock Overlays
+    const regToggle = document.getElementById('sys-reg-toggle');
+    const regKnob = document.getElementById('reg-toggle-knob');
+    if (regToggle) regToggle.checked = config.regOpen || false;
+    if (regKnob) {
+        regKnob.style.transform = config.regOpen ? 'translateX(20px)' : 'translateX(0px)';
+        regKnob.parentElement.style.backgroundColor = config.regOpen ? 'var(--success)' : '#334155'; 
+    }
+    
     const studentLockOverlay = document.getElementById('student-lock-overlay');
     if (studentLockOverlay) {
-        studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
+        studentLockOverlay.style.display = config.locked ? 'flex' : 'none';
     }
 
     const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
     if (adminLiveLockOverlay) {
-        adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
+        adminLiveLockOverlay.style.display = config.locked ? 'flex' : 'none';
     }
 
-    // 3. Disable Student Time-In/Out Buttons visually
     document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
         if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
-            btn.disabled = isLocked;
-            btn.style.opacity = isLocked ? '0.5' : '1';
-            btn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
+            btn.disabled = config.locked;
+            btn.style.opacity = config.locked ? '0.5' : '1';
+            btn.style.cursor = config.locked ? 'not-allowed' : 'pointer';
         }
     });
 }

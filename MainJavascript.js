@@ -974,22 +974,11 @@ async function logAttendanceAction(student, action, endOfShiftDetails = null, ov
     logs.push(newLog);
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
 
-    if (wasTombstoned) {
-         try {
-            await fetch(`${API_BASE_URL}/logs/sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-                body: JSON.stringify(logs)
-            });
-         } catch(e) {}
-    } else {
-         try {
-            await fetch(`${API_BASE_URL}/logs`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newLog)
-            });
-        } catch (e) {}
+    // FIX: Removed the old dead endpoints and connected it to the Cloud Sync Engine
+    try {
+        await pushLogsToCloud();
+    } catch (e) {
+        console.error("Failed to push attendance log to cloud.");
     }
     
     if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
@@ -3908,10 +3897,14 @@ function renderAttendanceSummary() {
             performanceStr = `<span style="color: var(--success); font-weight: bold;">Present ${presentCount} time(s)</span>`;
         }
 
+        // FIX: Match the exact tag styling from the Schedule view
+        let gcTagHtml = (student.gcHandle || student.tag) ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px;">${student.gcHandle || student.tag}</span>` : '<span style="color: var(--text-muted); font-size: 11px; margin-right:4px;">-</span>';
+        let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="font-weight: bold; color: var(--text-main);">${student.name || 'Unknown'}</td>
-            <td><span style="background: rgba(255,255,255,0.1); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${student.tag || '-'}</span></td>
+            <td>${classTagHtml}${gcTagHtml}</td>
             <td style="color: var(--text-muted);">${student.id}</td>
             <td>${performanceStr}</td>
         `;

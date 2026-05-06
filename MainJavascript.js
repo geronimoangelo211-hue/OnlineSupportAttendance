@@ -1273,23 +1273,16 @@ async function createManualHistoryDate() {
     };
 
     logs.push(initLog);
+    
+    // Save to local browser memory
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     
+    // FIX: Removed the dead API calls and connected it to the Master Cloud Sync Engine
     try {
-        if (isTombstoned) {
-            await fetch(`${API_BASE_URL}/logs/sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-                body: JSON.stringify(logs)
-            });
-        } else {
-            await fetch(`${API_BASE_URL}/logs`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(initLog)
-            });
-        }
-    } catch(e) {}
+        await pushLogsToCloud();
+    } catch(e) {
+        console.error("Failed to push new Date Card to the cloud", e);
+    }
 
     renderHistoryView();
     alert(`Date Card for ${dateStr} created successfully!`);

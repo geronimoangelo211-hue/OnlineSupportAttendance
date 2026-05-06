@@ -3517,7 +3517,9 @@ function checkDeviceLock() {
 
 function resetDeviceLockUI(idInput, btnIn, lockMsg) {
     if(idInput) {
-        idInput.value = '';
+        if (idInput.disabled) {
+            idInput.value = '';
+        }
         idInput.disabled = false;
     }
     if(btnIn) btnIn.style.display = 'inline-block';

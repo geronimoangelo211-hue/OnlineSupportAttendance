@@ -2821,26 +2821,21 @@ function renderMainDashboard() {
         populateCounts(timeInLogs, hourlyInCounts);
         populateCounts(timeOutLogs, hourlyOutCounts);
 
-        const maxLineVal = 50; 
+        const maxLineVal = 20; 
         const lineChartContainer = document.getElementById('dash-line-chart-container');
         if (lineChartContainer) {
             let svgHTML = `<svg width="100%" height="100%" viewBox="-40 -20 1080 260" preserveAspectRatio="none" style="flex: 1; display: block; overflow: visible;">`;
             
-            for(let val = 0; val <= 50; val += 10) {
+            for(let val = 0; val <= 20; val += 5) {
                 let yLine = 200 - ((val / maxLineVal) * 200);
                 svgHTML += `<line x1="0" y1="${yLine}" x2="1000" y2="${yLine}" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" />`;
                 svgHTML += `<text x="-15" y="${yLine + 5}" fill="var(--text-muted)" font-size="14" font-weight="bold" text-anchor="end">${val}</text>`;
             }
 
-            // ==========================================
-            // FIX: SHIFT THE GRAPH INDEX TO START AT 4 AM
-            // ==========================================
             let shiftedInCounts = new Array(24).fill(0);
             let shiftedOutCounts = new Array(24).fill(0);
             
             for(let h = 0; h < 24; h++) {
-                // If it's 4am to 11pm (hours 4-23), move them to the front (indices 0-19)
-                // If it's 12am to 3am (hours 0-3), move them to the back (indices 20-23)
                 let chartIdx = (h >= 4) ? (h - 4) : (h + 20);
                 shiftedInCounts[chartIdx] = hourlyInCounts[h];
                 shiftedOutCounts[chartIdx] = hourlyOutCounts[h];
@@ -2888,7 +2883,6 @@ function renderMainDashboard() {
             svgHTML += `</svg>`;
             
             let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 15px; color: var(--text-muted); font-size: 11px; padding: 0;">`;
-            // FIX: Graph Labels now wrap around perfectly matching the shift cycle!
             const lineLabels = ['4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p','12a','1a','2a','3a'];
             lineLabels.forEach(lbl => {
                 labelsHTML += `<span style="flex: 1; text-align: center;">${lbl}</span>`;

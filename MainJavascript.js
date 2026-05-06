@@ -4035,20 +4035,24 @@ function openDetailsModal(studentId, dateStr) {
         timeOutColor = '#66fcf1';
     }
 
+    // FIX: Safely extract data whether it is the new Object or the old Test String
     let gc = "Not Provided", ann = "Not Provided", postedBy = "Not Provided";
-    const targetLog = outLog || exemptLog; // The report is saved inside the Time Out log
+    const targetLog = outLog || exemptLog; 
 
     if (targetLog && targetLog.details) {
-        const detailsText = targetLog.details;
-        
-        // Scan the saved string to pull out the exact answers
-        const gcMatch = detailsText.match(/GC Handle:\s*(.+)/);
-        const annMatch = detailsText.match(/Announcement:\s*(.+)/);
-        const nameMatch = detailsText.match(/Posted By:\s*(.+)/);
-
-        if (gcMatch) gc = gcMatch[1].trim();
-        if (annMatch) ann = annMatch[1].trim();
-        if (nameMatch) postedBy = nameMatch[1].trim();
+        const det = targetLog.details;
+        if (typeof det === 'object') {
+            gc = det.gcHandle || "Not Provided";
+            ann = det.announcement || "Not Provided";
+            postedBy = det.whoPosted || det.postedBy || "Not Provided";
+        } else if (typeof det === 'string') {
+            const gcMatch = det.match(/GC Handle:\s*(.+)/);
+            const annMatch = det.match(/Announcement:\s*(.+)/);
+            const nameMatch = det.match(/Posted By:\s*(.+)/);
+            if (gcMatch) gc = gcMatch[1].trim();
+            if (annMatch) ann = annMatch[1].trim();
+            if (nameMatch) postedBy = nameMatch[1].trim();
+        }
     }
 
     const overlay = document.createElement('div');
@@ -4105,9 +4109,8 @@ function openDetailsModal(studentId, dateStr) {
     };
 }
 
-function viewTodayShiftDetails(studentId) {
-    const shift = getShiftDateDetails();
-    openDetailsModal(studentId, shift.dateStr);
+function viewTodayShift(idNum, dateStr) {
+    openDetailsModal(idNum, dateStr);
 }
 
 function viewPerformance(studentId) {
@@ -4180,9 +4183,7 @@ async function handleTimeOut() {
         return;
     }
 
-    const reportData = await askForShiftReport(student.gcHandle, student.name);
-    
-    const formattedDetails = `GC Handle: ${reportData.gc}\nAnnouncement: ${reportData.ann}\nPosted By: ${reportData.name}`;
+    const reportData = await askForShiftReport(student.gcHandle);
 
     const newLog = {
         name: student.name,
@@ -4190,7 +4191,11 @@ async function handleTimeOut() {
         action: actionStr,
         time: shift.realTimeStr,
         date: shift.dateStr,
-        details: formattedDetails 
+        details: {
+            gcHandle: reportData.gc,
+            announcement: reportData.ann,
+            whoPosted: reportData.name
+        } 
     };
 
     logs.push(newLog);

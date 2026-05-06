@@ -117,74 +117,24 @@ function applyVisitorMode() {
 }
 
 async function checkBackendLockStatus() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/config/status`, { cache: 'no-store' });
-        if (response.ok) {
-            const data = await response.json();
-            globalTimeOffset = data.timeOffset || 0;
-            globalDayOverride = data.dayOverride || "";
-
-            const localLockState = localStorage.getItem('attendance_closed') === 'true';
-            
-            if (isAuthenticated() && localLockState && !data.isLocked) {
-                await fetch(`${API_BASE_URL}/config/toggle`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-                    body: JSON.stringify({ isLocked: true })
-                });
-                isBackendLocked = true;
-                applyUIRestrictions();
-            } else {
-                if (isBackendLocked !== data.isLocked) {
-                    isBackendLocked = data.isLocked;
-                    localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
-                    applyUIRestrictions();
-                }
-            }
-        }
-    } catch (err) {}
+    return;
 }
 
-async function toggleAttendanceState(elem) {
-    let tk = sessionStorage.getItem('_auth_tkn_x92');
-    let userRole = 'ADMIN';
-    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
+async function toggleAttendanceState(checkbox) {
+    if(!isAuthenticated()) return;
+    const isLocked = checkbox.checked;
     
-    if (userRole === 'VISITOR') {
-        elem.checked = !elem.checked;
-        alert("Access Denied: View Only Mode.");
-        return;
-    }
-
-    const isClosed = elem.checked;
-    const knob = document.getElementById('sys-toggle-knob');
-    if(knob) {
-        knob.style.transform = isClosed ? 'translateX(20px)' : 'translateX(0px)';
-        knob.parentElement.style.backgroundColor = isClosed ? 'var(--error)' : '#334155';
-    }
-
+    const config = { locked: isLocked };
+    localStorage.setItem('sys_config', JSON.stringify(config));
+    
+    lastConfigPushTime = Date.now();
+    
+    applySystemConfig();
+    
     try {
-        const response = await fetch(`${API_BASE_URL}/config/toggle`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-            body: JSON.stringify({ isLocked: isClosed })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            isBackendLocked = data.isLocked;
-            localStorage.setItem('attendance_closed', isBackendLocked ? 'true' : 'false');
-            applyUIRestrictions();
-        } else {
-            elem.checked = !isClosed;
-            if(knob) {
-                knob.style.transform = !isClosed ? 'translateX(20px)' : 'translateX(0px)';
-                knob.parentElement.style.backgroundColor = !isClosed ? 'var(--error)' : '#334155';
-            }
-            alert("Failed to sync lock state with server. Check security key.");
-        }
-    } catch (err) {
-        elem.checked = !isClosed;
+        await pushLogsToCloud();
+    } catch (e) {
+        console.error("Failed to push lock state to cloud");
     }
 }
 
@@ -3887,21 +3837,13 @@ async function autoRestoreServerData() {
     }
 }
 
-async function toggleAttendanceState(checkbox) {
-    if(!isAuthenticated()) return;
-    const isLocked = checkbox.checked;
-    
-    const config = { locked: isLocked };
-    localStorage.setItem('sys_config', JSON.stringify(config));
-    lastConfigPushTime = Date.now(); 
-    
-    applySystemConfig();
-    
-    await pushLogsToCloud();
-}
-
 function applySystemConfig() {
-    const config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false}');
+    let config;
+    try {
+        config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false}');
+    } catch(e) {
+        config = { locked: false };
+    }
     
     const toggle = document.getElementById('sys-attendance-toggle');
     if (toggle && toggle.checked !== config.locked) {
@@ -3911,6 +3853,11 @@ function applySystemConfig() {
     const studentLockOverlay = document.getElementById('student-lock-overlay');
     if (studentLockOverlay) {
         studentLockOverlay.style.display = config.locked ? 'flex' : 'none';
+    }
+
+    const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
+    if (adminLiveLockOverlay) {
+        adminLiveLockOverlay.style.display = config.locked ? 'flex' : 'none';
     }
 }
 
@@ -3922,14 +3869,29 @@ function renderAttendanceSummary() {
     const tbody = document.getElementById('summary-body');
     if (!tbody) return;
 
+    // 1. Figure out "Today" (Handling Developer Simulation Tools if active)
+    let todayObj = new Date();
+    if (sessionStorage.getItem('dev_time_travel') === 'true') {
+        const sd = sessionStorage.getItem('dev_sim_date');
+        if (sd) todayObj = new Date(sd);
+    }
+    
+    let simDay = sessionStorage.getItem('dev_sim_day');
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDayStr = simDay || dayNames[todayObj.getDay()];
+
+    const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(targetDayStr));
+
     tbody.innerHTML = '';
     
-    if (validStudents.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">No students registered.</td></tr>';
+    if (scheduledStudents.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">No students scheduled for duty today (${targetDayStr}).</td></tr>`;
         return;
     }
 
-    validStudents.forEach(student => {
+    scheduledStudents.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    scheduledStudents.forEach(student => {
         const sLogs = logs.filter(l => String(l.id) === String(student.id));
         const presentCount = sLogs.filter(l => (l.action.includes('Time In') || l.action.includes('Exempted'))).length;
         

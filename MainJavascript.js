@@ -2654,11 +2654,21 @@ function applyDevSettings() {
 }
 
 function resetDevSettings() {
-    // Destroy the permanent time travel override
     localStorage.removeItem('dev_sim_settings');
     
-    alert("Reality Restored! The system is back to normal time.");
-    location.reload(); // Reload to return to real-time
+    sessionStorage.removeItem('dev_time_travel');
+    sessionStorage.removeItem('dev_sim_date');
+    sessionStorage.removeItem('dev_sim_day');
+
+    if(document.getElementById('dev-date')) document.getElementById('dev-date').value = '';
+    if(document.getElementById('dev-time')) document.getElementById('dev-time').value = '';
+    if(document.getElementById('dev-day')) document.getElementById('dev-day').value = '';
+
+    const banner = document.getElementById('simulated-clock-container');
+    if (banner) banner.style.display = 'none';
+
+    alert("Reality Restored! The system is back to normal real-world time.");
+    window.location.reload(true); 
 }
 
 async function resetDevSettings() {

@@ -302,24 +302,40 @@ async function pullFromCloud() {
 }
 
 function getShiftDateDetails() {
-    const pht = getPHT();
-    const hour = pht.getHours();
-    const min = pht.getMinutes();
-    
-    let shiftDate = new Date(pht);
-    if (hour < 4 || (hour === 4 && min === 0)) {
-        shiftDate.setDate(shiftDate.getDate() - 1);
+    let now = new Date();
+    let simSettings = null;
+
+    try {
+        const simStr = localStorage.getItem('dev_sim_settings');
+        if (simStr) simSettings = JSON.parse(simStr);
+    } catch(e) {}
+
+    if (simSettings && simSettings.active) {
+        if (simSettings.date && simSettings.time) {
+            now = new Date(`${simSettings.date}T${simSettings.time}`);
+        } else if (simSettings.date) {
+            const timeString = now.toTimeString().split(' ')[0];
+            now = new Date(`${simSettings.date}T${timeString}`);
+        } else if (simSettings.time) {
+            const dateString = now.toISOString().split('T')[0];
+            now = new Date(`${dateString}T${simSettings.time}`);
+        }
     }
+
+    const optionsDate = { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric' };
+    const optionsTime = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
     
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
-    return {
-        dateStr: shiftDate.toLocaleDateString('en-US'),
-        dayStr: globalDayOverride || days[shiftDate.getDay()],
-        hour: hour,
-        min: min,
-        realTimeStr: pht.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    };
+    const dateStr = now.toLocaleDateString('en-US', optionsDate);
+    const realTimeStr = now.toLocaleTimeString('en-US', optionsTime);
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    let dayStr = dayNames[now.getDay()];
+
+    if (simSettings && simSettings.active && simSettings.day) {
+        dayStr = simSettings.day;
+    }
+
+    return { dateStr, realTimeStr, dayStr, nowObj: now, isSimulated: !!simSettings };
 }
 
 const ACCENT_COLORS = {
@@ -2610,49 +2626,39 @@ async function renderHistoryTable(dateStr) {
 
 function initDevUI() {}
 
-async function applyDevSettings() {
-    const dateVal = document.getElementById('dev-date').value;
-    const timeVal = document.getElementById('dev-time').value;
-    const dayVal = document.getElementById('dev-day').value;
+function applyDevSettings() {
+    const dDate = document.getElementById('dev-date').value;
+    const dTime = document.getElementById('dev-time').value;
+    const dDay = document.getElementById('dev-day').value;
 
-    let newOffset = 0;
-    
-    if (dateVal && timeVal) {
-        const targetDate = new Date(`${dateVal}T${timeVal}:00`);
-        const now = new Date();
-        newOffset = targetDate.getTime() - now.getTime();
-    } else if (dateVal || timeVal) {
-        alert("To simulate time, you must provide BOTH a Date and a Time.");
+    if (!dDate && !dTime && !dDay) {
+        alert("Please select at least one simulated value.");
         return;
     }
 
-    try {
-        await fetch(`${API_BASE_URL}/config/time-travel`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-            body: JSON.stringify({ 
-                timeOffset: newOffset,
-                dayOverride: dayVal || "" 
-            })
-        });
-        
-        globalTimeOffset = newOffset;
-        globalDayOverride = dayVal || "";
-        
-        showMessage('dev-message', 'Time Travel Active! System is ticking in simulated time.', 'success');
-        
-        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-            renderDashboardSummary();
-            renderLogs();
-            renderSchedule();
-            renderMainDashboard();
-            renderDutyToday();
-            const secHist = document.getElementById('sec-history');
-            if (secHist && secHist.classList.contains('active')) renderHistoryView();
-        }
-    } catch(e) {
-        showMessage('dev-message', 'Network Error linking to backend.', 'error');
-    }
+    const simSettings = {
+        active: true,
+        date: dDate || null,
+        time: dTime || null,
+        day: dDay || null
+    };
+
+    localStorage.setItem('dev_sim_settings', JSON.stringify(simSettings));
+    
+    sessionStorage.removeItem('dev_time_travel');
+    sessionStorage.removeItem('dev_sim_date');
+    sessionStorage.removeItem('dev_sim_day');
+
+    alert("Time Travel Applied! The system will stay in this time until you click 'Reset Reality'.");
+    location.reload(); 
+}
+
+function resetDevSettings() {
+    // Destroy the permanent time travel override
+    localStorage.removeItem('dev_sim_settings');
+    
+    alert("Reality Restored! The system is back to normal time.");
+    location.reload(); // Reload to return to real-time
 }
 
 async function resetDevSettings() {
@@ -3990,3 +3996,20 @@ function renderAttendanceSummary() {
         tbody.appendChild(tr);
     });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        const simStr = localStorage.getItem('dev_sim_settings');
+        if (simStr) {
+            const simSettings = JSON.parse(simStr);
+            if (simSettings.active) {
+                if (simSettings.date && document.getElementById('dev-date')) document.getElementById('dev-date').value = simSettings.date;
+                if (simSettings.time && document.getElementById('dev-time')) document.getElementById('dev-time').value = simSettings.time;
+                if (simSettings.day && document.getElementById('dev-day')) document.getElementById('dev-day').value = simSettings.day;
+                
+                const banner = document.getElementById('simulated-clock-container');
+                if (banner) banner.style.display = 'block';
+            }
+        }
+    } catch(e) {}
+});

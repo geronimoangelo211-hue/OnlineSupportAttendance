@@ -260,10 +260,22 @@ async function pullFromCloud() {
         if (response.ok) {
             const data = await response.json();
             
-            if (data.students && data.students !== "[]") {
+            const serverHasStudents = (data.students && data.students !== "[]" && data.students !== "null");
+            const serverHasLogs = (data.logs && data.logs !== "[]" && data.logs !== "null");
+
+            const localStudents = localStorage.getItem('students');
+            const localLogs = localStorage.getItem('attendanceLogs');
+
+            if (!serverHasStudents && !serverHasLogs && (localStudents || localLogs)) {
+                console.log("Server is empty! Auto-pushing local data to the cloud database...");
+                await pushLogsToCloud();
+                return; 
+            }
+
+            if (serverHasStudents) {
                 localStorage.setItem('students', data.students);
             }
-            if (data.logs && data.logs !== "[]") {
+            if (serverHasLogs) {
                 localStorage.setItem('attendanceLogs', data.logs);
             }
         }
@@ -550,11 +562,8 @@ async function createAdminAccount() {
     const pass = document.getElementById('new-admin-pass').value;
     const role = document.getElementById('new-admin-role').value;
     const mathQ = document.getElementById('admin-math-q').textContent; 
-    const mathA = parseInt(document.getElementById('admin-math-a').value);
+    const mathAInput = document.getElementById('admin-math-a').value;
     const msg = document.getElementById('acc-message');
-
-    const parts = mathQ.split('+');
-    const expected = parseInt(parts[0].trim()) + parseInt(parts[1].trim());
 
     if (!user || !pass) {
         msg.textContent = "Username and Password are required.";
@@ -562,7 +571,16 @@ async function createAdminAccount() {
         return;
     }
 
-    if (mathA !== expected) {
+    if (mathAInput === "") {
+        msg.textContent = "Please answer the security math check.";
+        msg.className = "message error";
+        return;
+    }
+
+    const parts = mathQ.split('+');
+    const expected = parseInt(parts[0].trim()) + parseInt(parts[1].trim());
+
+    if (parseInt(mathAInput) !== expected) {
         msg.textContent = "Security math check failed.";
         msg.className = "message error";
         return;
@@ -582,23 +600,17 @@ async function createAdminAccount() {
         if (response.ok) {
             msg.textContent = "Account created successfully!";
             msg.className = "message success";
+            
             document.getElementById('new-admin-user').value = '';
             document.getElementById('new-admin-pass').value = '';
             document.getElementById('admin-math-a').value = '';
-            
-            // Generate new math question if you have that function
-            try { generateMathQuestion(); } catch(e){}
 
-            // ==========================================
-            // NEW: SAVE CLOUD BACKUP TO SURVIVE WIPES
-            // ==========================================
             let backup = JSON.parse(localStorage.getItem('cloud_accounts_backup')) || [];
-            backup = backup.filter(a => a.username !== user); // Remove old version if updating
+            backup = backup.filter(a => a.username !== user); 
             backup.push({ username: user, password: pass, role: role });
             localStorage.setItem('cloud_accounts_backup', JSON.stringify(backup));
             
-            // Push backup to your cloud
-            try { await pushLogsToCloud(); } catch(e){} 
+            await pushLogsToCloud(); 
             
             fetchAdminAccounts();
         } else {
@@ -724,58 +736,75 @@ function copyRegLink() {
 
 async function createStudent() {
     if(!isAuthenticated()) return;
-    const btn = document.querySelector('button[onclick="createStudent()"]');
-    if (btn && btn.disabled) return; 
+    const nameInput = document.getElementById('new-student-name').value.trim();
+    const idInput = document.getElementById('new-student-id').value.trim();
+    const classLvl = document.getElementById('new-student-class').value;
+    let gcHandle = document.getElementById('new-student-gc').value;
+    const msg = document.getElementById('admin-message');
 
-    const name = document.getElementById('new-student-name').value.trim();
-    const idNum = document.getElementById('new-student-id').value.trim();
-    const gcHandle = document.getElementById('new-student-gc').value.trim();
-    const classLevel = document.getElementById('new-student-class').value;
-
-    if (!name || !idNum || !classLevel) {
-        showMessage('admin-message', 'Please fill in Name, ID, and Class Level.', 'error');
+    if (!nameInput || !idInput || !classLvl || !gcHandle) {
+        msg.textContent = "Please fill all fields.";
+        msg.className = "message error";
         return;
     }
 
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = "ADDING...";
-        btn.style.opacity = "0.7";
-        btn.style.cursor = "not-allowed";
+    if (gcHandle === 'Other') {
+        const otherInput = document.getElementById('new-student-gc-other');
+        if (otherInput) gcHandle = otherInput.value.trim();
     }
 
-    try {
-        await pullFromCloud();
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-        
-        if (students.some(s => String(s.id).toLowerCase() === String(idNum).toLowerCase())) {
-            showMessage('admin-message', 'Student ID already exists!', 'error');
-            return;
-        }
-
-        students.push({ name: name, id: idNum, assignedDays: [], gcHandle: gcHandle, classLevel: classLevel });
-        localStorage.setItem('students', JSON.stringify(students));
-        await pushStudentsToCloud(); 
-        
-        document.getElementById('new-student-name').value = '';
-        document.getElementById('new-student-id').value = '';
-        document.getElementById('new-student-gc').value = '';
-        document.getElementById('new-student-class').value = '';
-        showMessage('admin-message', 'Student created globally!', 'success');
-        
-        renderStudents();
-        renderSchedule();
-        renderMainDashboard(); 
-        renderDashboardSummary();
-        renderDutyToday();
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = "ADD STUDENT";
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-        }
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    
+    if (students.find(s => String(s.id) === idInput)) {
+        msg.textContent = "Student ID already exists!";
+        msg.className = "message error";
+        return;
     }
+
+    // Add new student
+    students.push({
+        name: nameInput,
+        id: idInput,
+        classLevel: classLvl,
+        tag: gcHandle,
+        assignedDays: [] 
+    });
+
+    localStorage.setItem('students', JSON.stringify(students));
+    
+    msg.textContent = "Student Support added successfully!";
+    msg.className = "message success";
+    
+    document.getElementById('new-student-name').value = '';
+    document.getElementById('new-student-id').value = '';
+    document.getElementById('new-student-class').value = '';
+    document.getElementById('new-student-gc').value = '';
+
+    await pushLogsToCloud();
+    
+    renderStudents();
+    renderSchedule();
+}
+
+async function removeStudent(idNum) {
+    if(!isAuthenticated()) return;
+    if (!confirm(`Are you sure you want to permanently delete student ID ${idNum}?`)) return;
+
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    students = students.filter(s => String(s.id) !== String(idNum));
+    localStorage.setItem('students', JSON.stringify(students));
+
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    logs = logs.filter(l => String(l.id) !== String(idNum));
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+
+    await pushLogsToCloud();
+
+    renderStudents();
+    renderSchedule();
+    const dateStr = document.getElementById('history-table-title')?.getAttribute('data-date');
+    if (dateStr) renderHistoryTable(dateStr);
+    renderMainDashboard();
 }
 
 async function updateStudentGC() {

@@ -2654,55 +2654,30 @@ function applyDevSettings() {
 }
 
 function resetDevSettings() {
-    localStorage.removeItem('dev_sim_settings');
-    
-    sessionStorage.removeItem('dev_time_travel');
-    sessionStorage.removeItem('dev_sim_date');
-    sessionStorage.removeItem('dev_sim_day');
+    try {
+        localStorage.setItem('dev_sim_settings', JSON.stringify({ active: false, date: null, time: null, day: null }));
+        
+        localStorage.removeItem('dev_sim_settings');
+        sessionStorage.removeItem('dev_time_travel');
+        sessionStorage.removeItem('dev_sim_date');
+        sessionStorage.removeItem('dev_sim_day');
+        
+        const inputs = ['dev-date', 'dev-time', 'dev-day'];
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
 
-    if(document.getElementById('dev-date')) document.getElementById('dev-date').value = '';
-    if(document.getElementById('dev-time')) document.getElementById('dev-time').value = '';
-    if(document.getElementById('dev-day')) document.getElementById('dev-day').value = '';
+        const banner = document.getElementById('simulated-clock-container');
+        if (banner) banner.style.display = 'none';
 
-    const banner = document.getElementById('simulated-clock-container');
-    if (banner) banner.style.display = 'none';
+    } catch (e) {
+        console.error("Error during reset, forcing reload anyway.", e);
+    }
 
     alert("Reality Restored! The system is back to normal real-world time.");
-    window.location.reload(true); 
-}
-
-async function resetDevSettings() {
-    try {
-        await fetch(`${API_BASE_URL}/config/time-travel`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-            body: JSON.stringify({ timeOffset: 0, dayOverride: "" })
-        });
-        
-        globalTimeOffset = 0;
-        globalDayOverride = "";
-        
-        const dDate = document.getElementById('dev-date');
-        const dTime = document.getElementById('dev-time');
-        const dDay = document.getElementById('dev-day');
-        if(dDate) dDate.value = '';
-        if(dTime) dTime.value = '';
-        if(dDay) dDay.value = '';
-        
-        showMessage('dev-message', 'System reverted back to reality.', 'success');
-        
-        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-            renderDashboardSummary();
-            renderLogs();
-            renderSchedule();
-            renderMainDashboard();
-            renderDutyToday();
-            const secHist = document.getElementById('sec-history');
-            if (secHist && secHist.classList.contains('active')) renderHistoryView();
-        }
-    } catch(e) {
-        showMessage('dev-message', 'Network Error.', 'error');
-    }
+    
+    window.location.href = window.location.pathname + '?nocache=' + new Date().getTime();
 }
 
 function renderMainDashboard() {

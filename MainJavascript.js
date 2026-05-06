@@ -2965,18 +2965,10 @@ function renderDashboardSummary() {
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     
-    let todayObj = new Date();
-    if (sessionStorage.getItem('dev_time_travel') === 'true') {
-        const sd = sessionStorage.getItem('dev_sim_date');
-        if (sd) todayObj = new Date(sd);
-    }
-    
-    const dateOpts = { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric' };
-    let todayStr = todayObj.toLocaleDateString('en-US', dateOpts);
-    
-    let simDay = sessionStorage.getItem('dev_sim_day');
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const targetDayStr = simDay || dayNames[todayObj.getDay()];
+    const shift = getShiftDateDetails();
+    const todayStr = shift.dateStr;
+    const targetDayStr = shift.dayStr;
+    const now = getPHT().getTime(); 
 
     const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const total = validStudents.length;
@@ -3022,7 +3014,6 @@ function renderDashboardSummary() {
     if(document.getElementById('dash-fresh-present')) document.getElementById('dash-fresh-present').textContent = freshPresent;
     if(document.getElementById('dash-upper-present')) document.getElementById('dash-upper-present').textContent = upperPresent;
 
-    const now = todayObj.getTime();
     const inactiveFreshmen = [];
     const inactiveUpper = [];
 
@@ -3960,18 +3951,13 @@ function renderAttendanceSummary() {
     const tbody = document.getElementById('summary-body');
     if (!tbody) return;
 
-    // 1. Figure out "Today" (Handling Developer Simulation Tools if active)
-    let todayObj = new Date();
-    if (sessionStorage.getItem('dev_time_travel') === 'true') {
-        const sd = sessionStorage.getItem('dev_sim_date');
-        if (sd) todayObj = new Date(sd);
-    }
-    
-    let simDay = sessionStorage.getItem('dev_sim_day');
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const targetDayStr = simDay || dayNames[todayObj.getDay()];
+    const shift = getShiftDateDetails();
+    const targetDayStr = shift.dayStr;
+    const todayStr = shift.dateStr;
 
     const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(targetDayStr));
+    
+    const todayLogs = logs.filter(l => l.date === todayStr);
 
     tbody.innerHTML = '';
     
@@ -3983,7 +3969,7 @@ function renderAttendanceSummary() {
     scheduledStudents.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     scheduledStudents.forEach(student => {
-        const sLogs = logs.filter(l => String(l.id) === String(student.id));
+        const sLogs = todayLogs.filter(l => String(l.id) === String(student.id));
         const presentCount = sLogs.filter(l => (l.action.includes('Time In') || l.action.includes('Exempted'))).length;
         
         let performanceStr = '<span style="color: var(--error);">0 Logs</span>';
@@ -3991,7 +3977,6 @@ function renderAttendanceSummary() {
             performanceStr = `<span style="color: var(--success); font-weight: bold;">Present ${presentCount} time(s)</span>`;
         }
 
-        // FIX: Match the exact tag styling from the Schedule view
         let gcTagHtml = (student.gcHandle || student.tag) ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px;">${student.gcHandle || student.tag}</span>` : '<span style="color: var(--text-muted); font-size: 11px; margin-right:4px;">-</span>';
         let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 

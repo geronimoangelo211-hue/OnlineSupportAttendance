@@ -684,6 +684,9 @@ async function createStudent() {
     let gcHandle = document.getElementById('new-student-gc').value;
     const msg = document.getElementById('admin-message');
 
+    // NEW: Capture the selected schedule days
+    const selectedDays = Array.from(document.querySelectorAll('.new-stu-day:checked')).map(cb => cb.value);
+
     if (!nameInput || !idInput || !classLvl || !gcHandle) {
         msg.textContent = "Please fill all fields.";
         msg.className = "message error";
@@ -703,13 +706,13 @@ async function createStudent() {
         return;
     }
 
-    // Add new student
+    // Add new student with schedule
     students.push({
         name: nameInput,
         id: idInput,
         classLevel: classLvl,
-        gcHandle: gcHandle, // FIXED: Changed from 'tag' to 'gcHandle'
-        assignedDays: [] 
+        gcHandle: gcHandle,
+        assignedDays: selectedDays // Saves the checked days instantly
     });
 
     localStorage.setItem('students', JSON.stringify(students));
@@ -717,15 +720,21 @@ async function createStudent() {
     msg.textContent = "Student Support added successfully!";
     msg.className = "message success";
     
+    // Clear inputs
     document.getElementById('new-student-name').value = '';
     document.getElementById('new-student-id').value = '';
     document.getElementById('new-student-class').value = '';
     document.getElementById('new-student-gc').value = '';
+    document.querySelectorAll('.new-stu-day').forEach(cb => cb.checked = false);
 
     await pushLogsToCloud();
     
     renderStudents();
     renderSchedule();
+    
+    if (document.getElementById('sec-dashboard') && document.getElementById('sec-dashboard').classList.contains('active')) {
+        renderDashboardSummary(); 
+    }
 }
 
 async function removeStudent(idNum) {
@@ -1759,6 +1768,8 @@ function verifyDevPassword() {
     }
 }
 
+let settingsClickTimer = null;
+
 function switchAdminSection(sectionId, element) {
     document.querySelectorAll('.admin-nav-item').forEach(el => el.classList.remove('active'));
     if (element) element.classList.add('active');
@@ -1767,7 +1778,22 @@ function switchAdminSection(sectionId, element) {
     const targetSec = document.getElementById(sectionId);
     if (targetSec) targetSec.classList.add('active');
 
-    // FIX: INSTANTLY RENDER DATA WHEN TABS ARE CLICKED
+    if (sectionId === 'sec-settings') {
+        settingsClickCount++;
+        
+        clearTimeout(settingsClickTimer);
+        settingsClickTimer = setTimeout(() => {
+            settingsClickCount = 0;
+        }, 2000);
+
+        if (settingsClickCount >= 20) {
+            openDevPasswordModal();
+            settingsClickCount = 0; 
+        }
+    } else {
+        settingsClickCount = 0; 
+    }
+
     if (sectionId === 'sec-dashboard') {
         renderDashboardSummary();
     } else if (sectionId === 'sec-attendance') {

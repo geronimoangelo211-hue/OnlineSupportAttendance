@@ -2832,8 +2832,22 @@ function renderMainDashboard() {
                 svgHTML += `<text x="-15" y="${yLine + 5}" fill="var(--text-muted)" font-size="14" font-weight="bold" text-anchor="end">${val}</text>`;
             }
 
+            // ==========================================
+            // FIX: SHIFT THE GRAPH INDEX TO START AT 4 AM
+            // ==========================================
+            let shiftedInCounts = new Array(24).fill(0);
+            let shiftedOutCounts = new Array(24).fill(0);
+            
+            for(let h = 0; h < 24; h++) {
+                // If it's 4am to 11pm (hours 4-23), move them to the front (indices 0-19)
+                // If it's 12am to 3am (hours 0-3), move them to the back (indices 20-23)
+                let chartIdx = (h >= 4) ? (h - 4) : (h + 20);
+                shiftedInCounts[chartIdx] = hourlyInCounts[h];
+                shiftedOutCounts[chartIdx] = hourlyOutCounts[h];
+            }
+
             let inPoints = [];
-            hourlyInCounts.forEach((count, i) => {
+            shiftedInCounts.forEach((count, i) => {
                 let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
                 let y = 200 - ((c / maxLineVal) * 200);
@@ -2841,7 +2855,7 @@ function renderMainDashboard() {
             });
 
             let outPoints = [];
-            hourlyOutCounts.forEach((count, i) => {
+            shiftedOutCounts.forEach((count, i) => {
                 let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
                 let y = 200 - ((c / maxLineVal) * 200);
@@ -2851,7 +2865,7 @@ function renderMainDashboard() {
             svgHTML += `<polyline points="${outPoints.join(' ')}" fill="none" stroke="var(--error)" stroke-width="3.5" />`;
             svgHTML += `<polyline points="${inPoints.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3.5" />`;
             
-            hourlyOutCounts.forEach((count, i) => {
+            shiftedOutCounts.forEach((count, i) => {
                 let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
                 let y = 200 - ((c / maxLineVal) * 200);
@@ -2861,7 +2875,7 @@ function renderMainDashboard() {
                 }
             });
 
-            hourlyInCounts.forEach((count, i) => {
+            shiftedInCounts.forEach((count, i) => {
                 let x = (i / 23) * 1000;
                 let c = Math.min(count, maxLineVal);
                 let y = 200 - ((c / maxLineVal) * 200);
@@ -2874,7 +2888,8 @@ function renderMainDashboard() {
             svgHTML += `</svg>`;
             
             let labelsHTML = `<div style="display: flex; justify-content: space-between; margin-top: 15px; color: var(--text-muted); font-size: 11px; padding: 0;">`;
-            const lineLabels = ['12a','1a','2a','3a','4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p'];
+            // FIX: Graph Labels now wrap around perfectly matching the shift cycle!
+            const lineLabels = ['4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p','12a','1a','2a','3a'];
             lineLabels.forEach(lbl => {
                 labelsHTML += `<span style="flex: 1; text-align: center;">${lbl}</span>`;
             });
@@ -3706,10 +3721,8 @@ async function saveEditLogModal() {
         }
     }
 
-    // Save locally immediately
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
     
-    // Push safely to the cloud
     try { await pushLogsToCloud(); } catch(e) { console.error("Cloud push failed:", e); }
     
     renderHistoryTable(dateStr);

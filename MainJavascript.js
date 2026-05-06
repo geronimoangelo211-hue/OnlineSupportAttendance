@@ -1502,123 +1502,109 @@ async function handleTimeIn() {
 }
 
 async function handleTimeOut() {
-    if (isBackendLocked) {
-        showMessage('student-message', 'Access Denied: The system is locked.', 'error');
-        return; 
-    }
+    const idInput = document.getElementById('student-id-input'); 
+    const messageEl = document.getElementById('student-message');
 
-    if (!isCaptchaSolved) {
-        showMessage('student-message', 'Please complete the slider puzzle.', 'error');
-        initSliderCaptcha();
-        checkDeviceLock();
+    if (!idInput || !messageEl) {
+        console.error("System Error: Could not find the ID input or message element.");
         return;
     }
 
-    const idNum = document.getElementById('student-id-input').value.trim();
-    if (!idNum) { 
-        showMessage('student-message', 'Please enter your ID number.', 'error'); 
-        initSliderCaptcha();
-        return; 
+    const studentId = idInput.value.trim();
+
+    if (!studentId) {
+        messageEl.textContent = "Please enter your Student ID Number.";
+        messageEl.className = "message error";
+        return;
     }
 
-    const timeOutBtn = document.querySelector('.btn-out');
-    if(timeOutBtn) {
-        timeOutBtn.textContent = "PROCESSING...";
-        timeOutBtn.disabled = true;
-        timeOutBtn.style.opacity = "0.7";
+    const timeWindow = getCurrentTimeWindow();
+
+    if (timeWindow === "LOCKOUT") {
+        messageEl.textContent = "System Locked (12:01 PM - 4:59 PM). Time Out opens at 5:00 PM.";
+        messageEl.className = "message error";
+        return;
+    }
+    if (timeWindow === "TIME_IN_NORMAL" || timeWindow === "TIME_IN_LATE" || timeWindow === "TOO_EARLY") {
+        messageEl.textContent = "It is too early to Time Out. Time Out opens at 5:00 PM.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    let actionStr = "Time Out";
+    if (timeWindow === "TIME_OUT_LATE") {
+        actionStr = "Time Out (Late)"; 
+    }
+
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const shift = getShiftDateDetails();
+
+    const student = students.find(s => String(s.id).toLowerCase() === studentId.toLowerCase());
+    
+    if (!student) {
+        messageEl.textContent = "Student ID not found. Please register first.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    if (!student.assignedDays || !student.assignedDays.includes(shift.dayStr)) {
+        messageEl.textContent = `You are not scheduled for duty today (${shift.dayStr}).`;
+        messageEl.className = "message error";
+        return;
+    }
+
+    const hasTimedIn = logs.some(l => 
+        String(l.id).toLowerCase() === studentId.toLowerCase() && 
+        l.date === shift.dateStr && 
+        l.action.includes('Time In')
+    );
+
+    if (!hasTimedIn) {
+        messageEl.textContent = "You cannot Time Out because you have no Time In record for today.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    const alreadyTimedOut = logs.some(l => 
+        String(l.id).toLowerCase() === studentId.toLowerCase() && 
+        l.date === shift.dateStr && 
+        l.action.includes('Time Out')
+    );
+
+    if (alreadyTimedOut) {
+        messageEl.textContent = "You have already timed out for this shift.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    const newLog = {
+        name: student.name,
+        id: student.id,
+        action: actionStr,
+        time: shift.realTimeStr,
+        date: shift.dateStr,
+        details: null
+    };
+
+    logs.push(newLog);
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    
+    messageEl.textContent = `Success: ${student.name} - ${actionStr} at ${shift.realTimeStr}`;
+    messageEl.className = "message success";
+    idInput.value = ''; 
+
+    try {
+        await pushLogsToCloud();
+    } catch (e) {
+        console.error("Cloud push failed, but data is saved locally.", e);
     }
 
     try {
-        await pullFromCloud();
-        if (isBackendLocked) {
-            showMessage('student-message', 'Access Denied: The system is locked.', 'error');
-            applyUIRestrictions();
-            return;
-        }
-
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-        const student = students.find(s => String(s.id) === String(idNum));
-        if (!student) { 
-            showMessage('student-message', 'ID not found.', 'error'); 
-            initSliderCaptcha(); 
-            checkDeviceLock();
-            return; 
-        }
-
-        const shift = getShiftDateDetails();
-        if (!student.assignedDays || student.assignedDays.length === 0) {
-            showMessage('student-message', 'You have no assigned schedule.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-        if (!student.assignedDays.includes(shift.dayStr)) {
-            showMessage('student-message', `Access Denied: You are not scheduled for this shift.`, 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-
-        const todayLogs = getTodayLogs(idNum);
-        
-        if (todayLogs.some(l => l.action === 'Time Out (Exempted)')) {
-            showMessage('student-message', 'You are marked as Exempted for this shift.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-
-        const hasTimeIn = todayLogs.some(l => l.action.includes('Time In'));
-
-        if (!hasTimeIn) {
-            showMessage('student-message', 'No Time In record found for this shift.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-
-        if (todayLogs.some(l => l.action.includes('Time Out') && !l.action.includes('Exempted'))) {
-            showMessage('student-message', 'You have already timed out for this shift.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-
-        if (shift.hour >= 5 && shift.hour < 17) {
-            showMessage('student-message', 'Time Out opens at 5:00 PM.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        } 
-
-        pendingTimeOutStudent = student;
-        pendingTimeOutAction = (shift.hour >= 0 && shift.hour <= 4) ? 'Time Out (Late)' : 'Time Out';
-        pendingTimeOutDate = shift.dateStr; 
-        
-        document.getElementById('gc-handle').value = student.gcHandle || '';
-        document.getElementById('gc-handle-other').style.display = 'none';
-        document.getElementById('gc-handle-other').value = '';
-        
-        if (student.gcHandle && !document.querySelector(`#gc-handle option[value="${student.gcHandle}"]`)) {
-             document.getElementById('gc-handle').value = 'Other';
-             document.getElementById('gc-handle-other').style.display = 'block';
-             document.getElementById('gc-handle-other').value = student.gcHandle;
-        }
-
-        document.querySelectorAll('input[name="announcement"]').forEach(r => r.checked = false);
-        document.querySelectorAll('input[name="who-posted"]').forEach(r => r.checked = false);
-        document.getElementById('timeout-modal-message').textContent = '';
-        
-        const modal = document.getElementById('timeout-modal');
-        if (modal) modal.style.display = 'flex';
-
-    } finally {
-        if(timeOutBtn) {
-            timeOutBtn.textContent = "Time Out";
-            timeOutBtn.disabled = false;
-            timeOutBtn.style.opacity = "1";
-        }
-    }
+        if (typeof renderAttendanceLogs === 'function') renderAttendanceLogs();
+        if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+        if (typeof renderAttendanceSummary === 'function') renderAttendanceSummary();
+    } catch(e) {}
 }
 
 async function finalizeTimeOut() {

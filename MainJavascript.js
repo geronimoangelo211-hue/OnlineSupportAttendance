@@ -117,7 +117,13 @@ function applyVisitorMode() {
 }
 
 async function checkBackendLockStatus() {
-    return;
+    let config;
+    try {
+        config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false}');
+    } catch(e) {
+        config = { locked: false };
+    }
+    isBackendLocked = config.locked;
 }
 
 async function toggleAttendanceState(checkbox) {
@@ -139,28 +145,7 @@ async function toggleAttendanceState(checkbox) {
 }
 
 function applyUIRestrictions() {
-    const isLocked = localStorage.getItem('attendance_closed') === 'true';
-    const lockToggle = document.getElementById('sys-attendance-toggle');
-    const lockKnob = document.getElementById('sys-toggle-knob');
-    if(lockToggle && lockKnob) {
-        lockToggle.checked = isLocked;
-        lockKnob.style.transform = isLocked ? 'translateX(20px)' : 'translateX(0px)';
-        lockKnob.parentElement.style.backgroundColor = isLocked ? 'var(--error)' : '#334155';
-    }
-    
-    const studentLockOverlay = document.getElementById('student-lock-overlay');
-    if (studentLockOverlay) studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
-
-    const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
-    if (adminLiveLockOverlay) adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
-
-    document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
-        if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
-            btn.disabled = isLocked;
-            btn.style.opacity = isLocked ? '0.5' : '1';
-            btn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
-        }
-    });
+    applySystemConfig();
 }
 
 function promptSyncConflict(studentCount) {
@@ -723,7 +708,7 @@ async function createStudent() {
         name: nameInput,
         id: idInput,
         classLevel: classLvl,
-        tag: gcHandle,
+        gcHandle: gcHandle, // FIXED: Changed from 'tag' to 'gcHandle'
         assignedDays: [] 
     });
 
@@ -3844,21 +3829,37 @@ function applySystemConfig() {
     } catch(e) {
         config = { locked: false };
     }
+
+    const isLocked = config.locked;
     
+    // 1. Update the Toggle Switch visually (Move Knob and Change Color)
     const toggle = document.getElementById('sys-attendance-toggle');
-    if (toggle && toggle.checked !== config.locked) {
-        toggle.checked = config.locked;
+    const lockKnob = document.getElementById('sys-toggle-knob');
+    if (toggle) toggle.checked = isLocked;
+    if (lockKnob) {
+        lockKnob.style.transform = isLocked ? 'translateX(20px)' : 'translateX(0px)';
+        lockKnob.parentElement.style.backgroundColor = isLocked ? 'var(--error)' : '#334155';
     }
     
+    // 2. Show/Hide the Lock Overlays
     const studentLockOverlay = document.getElementById('student-lock-overlay');
     if (studentLockOverlay) {
-        studentLockOverlay.style.display = config.locked ? 'flex' : 'none';
+        studentLockOverlay.style.display = isLocked ? 'flex' : 'none';
     }
 
     const adminLiveLockOverlay = document.getElementById('admin-live-lock-overlay');
     if (adminLiveLockOverlay) {
-        adminLiveLockOverlay.style.display = config.locked ? 'flex' : 'none';
+        adminLiveLockOverlay.style.display = isLocked ? 'flex' : 'none';
     }
+
+    // 3. Disable Student Time-In/Out Buttons visually
+    document.querySelectorAll('.btn-in, .btn-out').forEach(btn => {
+        if(!btn.getAttribute('onclick') || (!btn.getAttribute('onclick').includes('Modal') && !btn.getAttribute('onclick').includes('togglePortal'))) {
+            btn.disabled = isLocked;
+            btn.style.opacity = isLocked ? '0.5' : '1';
+            btn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
+        }
+    });
 }
 
 function renderAttendanceSummary() {

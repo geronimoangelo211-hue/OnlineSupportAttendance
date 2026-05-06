@@ -255,50 +255,21 @@ window.resolveSync = async function(action) {
 }
 
 async function pullFromCloud() {
-    if (isSyncing) return;
-    isSyncing = true;
     try {
-        const stuRes = await fetch(`${API_BASE_URL}/students`, { cache: 'no-store' });
-        if (stuRes.ok) {
-            const cloudStudents = await stuRes.json();
-            const localStudents = JSON.parse(localStorage.getItem('students')) || [];
-
-            if (cloudStudents.length > 0) {
-                if (cloudStudents[0].id === 'SYS_WIPE_ALL') {
-                    localStorage.setItem('students', JSON.stringify([]));
-                } else {
-                    localStorage.setItem('students', JSON.stringify(cloudStudents));
-                }
-            } else if (localStudents.length > 0 && isAuthenticated()) {
-                if (!sessionStorage.getItem('sync_conflict_resolved')) {
-                    promptSyncConflict(localStudents.length);
-                    isSyncing = false;
-                    return; 
-                } else if (sessionStorage.getItem('sync_action') === 'push') {
-                    await pushStudentsToCloud();
-                }
+        const response = await fetch(`${API_BASE_URL}/sync/pull`);
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.students && data.students !== "[]") {
+                localStorage.setItem('students', data.students);
+            }
+            if (data.logs && data.logs !== "[]") {
+                localStorage.setItem('attendanceLogs', data.logs);
             }
         }
-        
-        const logRes = await fetch(`${API_BASE_URL}/logs`, { cache: 'no-store' });
-        if (logRes.ok) {
-            const cloudLogs = await logRes.json();
-            const localLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-
-            if (cloudLogs.length > 0) {
-                if (cloudLogs[0].id === 'SYS_WIPE_ALL' || cloudLogs[0].id === 'SYS_WIPE_LOGS') {
-                    localStorage.setItem('attendanceLogs', JSON.stringify([]));
-                } else {
-                    localStorage.setItem('attendanceLogs', JSON.stringify(cloudLogs));
-                }
-            } else if (localLogs.length > 0 && isAuthenticated()) {
-                if (sessionStorage.getItem('sync_action') === 'push') {
-                    await pushLogsToCloud();
-                }
-            }
-        }
-    } catch (err) {}
-    isSyncing = false;
+    } catch (e) {
+        console.error("Cloud pull failed. Continuing with local memory.", e);
+    }
 }
 
 async function pushStudentsToCloud() {
@@ -314,20 +285,21 @@ async function pushStudentsToCloud() {
 }
 
 async function pushLogsToCloud() {
-    if (!isAuthenticated()) return; 
-    const data = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const studentsData = localStorage.getItem('students') || "[]";
+    const logsData = localStorage.getItem('attendanceLogs') || "[]";
+    
     try {
-        const response = await fetch(`${API_BASE_URL}/logs/sync`, {
+        await fetch(`${API_BASE_URL}/sync/push`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
-            body: JSON.stringify(data)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                students: studentsData,
+                logs: logsData
+            })
         });
-        if (response.status === 403) {
-            isBackendLocked = true;
-            localStorage.setItem('attendance_closed', 'true');
-            applyUIRestrictions();
-        }
-    } catch (err) {}
+    } catch (e) {
+        console.error("Cloud push failed. Data is safe locally but not backed up.", e);
+    }
 }
 
 function getShiftDateDetails() {

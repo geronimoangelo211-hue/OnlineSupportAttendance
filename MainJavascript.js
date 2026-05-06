@@ -322,20 +322,62 @@ function getShiftDateDetails() {
         }
     }
 
-    const optionsDate = { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric' };
-    const optionsTime = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+    // --- SHIFT ROLLOVER LOGIC (4:01 AM) ---
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
     
-    const dateStr = now.toLocaleDateString('en-US', optionsDate);
+    let shiftDateObj = new Date(now.getTime());
+    // If it is between 12:00 AM (0) and 4:00 AM, subtract 1 day.
+    if (hours < 4 || (hours === 4 && minutes === 0)) {
+        shiftDateObj.setDate(shiftDateObj.getDate() - 1);
+    }
+
+    const optionsDate = { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric' };
+    const dateStr = shiftDateObj.toLocaleDateString('en-US', optionsDate);
+
+    const optionsTime = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
     const realTimeStr = now.toLocaleTimeString('en-US', optionsTime);
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    let dayStr = dayNames[now.getDay()];
+    let dayStr = dayNames[shiftDateObj.getDay()];
 
     if (simSettings && simSettings.active && simSettings.day) {
         dayStr = simSettings.day;
     }
 
-    return { dateStr, realTimeStr, dayStr, nowObj: now, isSimulated: !!simSettings };
+    return { 
+        dateStr, 
+        realTimeStr, 
+        dayStr, 
+        nowObj: now, 
+        shiftObj: shiftDateObj, 
+        isSimulated: !!simSettings 
+    };
+}
+
+function getCurrentTimeWindow() {
+    const shift = getShiftDateDetails();
+    const hrs = shift.nowObj.getHours();
+    const mins = shift.nowObj.getMinutes();
+    let totalMins = (hrs * 60) + mins; 
+
+    if (totalMins <= 240) { 
+        totalMins += 1440; 
+    }
+
+    if (totalMins >= 241 && totalMins <= 299) return "TOO_EARLY";
+    
+    if (totalMins >= 300 && totalMins <= 480) return "TIME_IN_NORMAL";
+    
+    if (totalMins >= 481 && totalMins <= 720) return "TIME_IN_LATE";
+    
+    if (totalMins >= 721 && totalMins <= 1019) return "LOCKOUT";
+    
+    if (totalMins >= 1020 && totalMins <= 1439) return "TIME_OUT_NORMAL";
+    
+    if (totalMins >= 1440 && totalMins <= 1680) return "TIME_OUT_LATE";
+
+    return "UNKNOWN";
 }
 
 const ACCENT_COLORS = {
@@ -1360,97 +1402,103 @@ async function factoryReset() {
 }
 
 async function handleTimeIn() {
-    if (isBackendLocked) {
-        showMessage('student-message', 'Access Denied: The system is locked.', 'error');
-        return; 
-    }
+    const idInput = document.getElementById('student-id-input'); 
+    const messageEl = document.getElementById('student-message');
 
-    if (!isCaptchaSolved) {
-        showMessage('student-message', 'Please complete the slider puzzle.', 'error');
-        initSliderCaptcha();
-        checkDeviceLock(); 
+    if (!idInput || !messageEl) {
+        console.error("System Error: Could not find the ID input or message element.");
         return;
     }
 
-    const idNum = document.getElementById('student-id-input').value.trim();
-    if (!idNum) { 
-        showMessage('student-message', 'Please enter your ID number.', 'error'); 
-        initSliderCaptcha();
-        return; 
+    const studentId = idInput.value.trim();
+
+    if (!studentId) {
+        messageEl.textContent = "Please enter your Student ID Number.";
+        messageEl.className = "message error";
+        return;
     }
 
-    const timeInBtn = document.querySelector('.btn-in');
-    if(timeInBtn) {
-        timeInBtn.textContent = "PROCESSING...";
-        timeInBtn.disabled = true;
-        timeInBtn.style.opacity = "0.7";
+    const timeWindow = getCurrentTimeWindow();
+
+    if (timeWindow === "TOO_EARLY") {
+        messageEl.textContent = "Shift has not started yet. Time In opens at 5:00 AM.";
+        messageEl.className = "message error";
+        return;
+    }
+    if (timeWindow === "LOCKOUT") {
+        messageEl.textContent = "System Locked (12:01 PM - 4:59 PM). If you missed Time In, you are marked Absent.";
+        messageEl.className = "message error";
+        return;
+    }
+    if (timeWindow === "TIME_OUT_NORMAL" || timeWindow === "TIME_OUT_LATE") {
+        messageEl.textContent = "Time In is closed for this shift. It is currently the Time Out period.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    let actionStr = "Time In";
+    if (timeWindow === "TIME_IN_LATE") {
+        actionStr = "Time In (Late)";
+    }
+
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const shift = getShiftDateDetails();
+
+    const student = students.find(s => String(s.id).toLowerCase() === studentId.toLowerCase());
+    
+    if (!student) {
+        messageEl.textContent = "Student ID not found. Please register first.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    if (!student.assignedDays || !student.assignedDays.includes(shift.dayStr)) {
+        messageEl.textContent = `You are not scheduled for duty today (${shift.dayStr}).`;
+        messageEl.className = "message error";
+        return;
+    }
+
+    const alreadyTimedIn = logs.some(l => 
+        String(l.id).toLowerCase() === studentId.toLowerCase() && 
+        l.date === shift.dateStr && 
+        l.action.includes('Time In')
+    );
+
+    if (alreadyTimedIn) {
+        messageEl.textContent = "You have already timed in for this shift.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    const newLog = {
+        name: student.name,
+        id: student.id,
+        action: actionStr,
+        time: shift.realTimeStr,
+        date: shift.dateStr,
+        details: null
+    };
+
+    logs.push(newLog);
+
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    
+    messageEl.textContent = `Success: ${student.name} - ${actionStr} at ${shift.realTimeStr}`;
+    messageEl.className = "message success";
+    idInput.value = ''; 
+
+    try {
+        await pushLogsToCloud();
+    } catch (e) {
+        console.error("Cloud push failed, but data is saved locally.", e);
     }
 
     try {
-        await pullFromCloud();
-        if (isBackendLocked) {
-            showMessage('student-message', 'Access Denied: The system is locked.', 'error');
-            applyUIRestrictions();
-            return;
-        }
-
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-        const student = students.find(s => String(s.id) === String(idNum));
-        if (!student) { 
-            showMessage('student-message', 'ID not found.', 'error'); 
-            initSliderCaptcha(); 
-            checkDeviceLock();
-            return; 
-        }
-
-        const shift = getShiftDateDetails();
-        if (!student.assignedDays || student.assignedDays.length === 0) {
-            showMessage('student-message', 'You have no assigned schedule. Please contact the Support Head.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-        if (!student.assignedDays.includes(shift.dayStr)) {
-            showMessage('student-message', `Access Denied: You are not scheduled for today. Your shifts are on: ${student.assignedDays.join(', ')}.`, 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-
-        const todayLogs = getTodayLogs(idNum);
-        if (todayLogs.some(l => l.action.includes('Time In') || l.action === 'No Attendance')) {
-            showMessage('student-message', 'You already have an attendance record for today.', 'error');
-            initSliderCaptcha();
-            checkDeviceLock();
-            return;
-        }
-
-        if (shift.hour < 5) {
-            showMessage('student-message', 'Time In opens at 5:00 AM.', 'error');
-            initSliderCaptcha();
-            return;
-        } else if (shift.hour > 12 || (shift.hour === 12 && shift.min >= 1)) {
-            await logAttendanceAction(student, 'No Attendance', null, shift.dateStr);
-            showMessage('student-message', 'Time In is closed. You are marked as No Attendance.', 'error');
-        } else if (shift.hour > 8 || (shift.hour === 8 && shift.min >= 1)) { 
-            await logAttendanceAction(student, 'Time In (Late)', null, shift.dateStr);
-            showMessage('student-message', 'Successfully logged Time In (Late)', 'success');
-        } else { 
-            await logAttendanceAction(student, 'Time In', null, shift.dateStr);
-            showMessage('student-message', 'Successfully logged Time In', 'success');
-        }
-        
-        localStorage.setItem('activeDeviceStudent', student.id);
-        initSliderCaptcha(); 
-        checkDeviceLock(); 
-
-    } finally {
-        if(timeInBtn) {
-            timeInBtn.textContent = "Time In";
-            timeInBtn.disabled = false;
-            timeInBtn.style.opacity = "1";
-        }
-    }
+        if (typeof renderAttendanceLogs === 'function') renderAttendanceLogs();
+        if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+        if (typeof renderAttendanceSummary === 'function') renderAttendanceSummary();
+    } catch(e) {}
 }
 
 async function handleTimeOut() {
@@ -4077,5 +4125,6 @@ function renderAttendanceLogs() {
         `;
         tbody.appendChild(tr);
     });
+    
     try { applyVisitorMode(); } catch(e) {}
 }

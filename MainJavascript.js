@@ -2538,23 +2538,13 @@ async function renderHistoryTable(dateStr) {
     
     const tbody = document.getElementById('history-logs-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading logs from secure server...</td></tr>';
 
     const searchInput = document.getElementById('search-history-logs');
     const query = searchInput ? searchInput.value.toLowerCase() : '';
 
-    let dayLogs = [];
-    try {
-        const response = await fetch(`${API_BASE_URL}/logs/history/${encodeURIComponent(dateStr)}`);
-        if (response.ok) {
-            dayLogs = await response.json();
-        } else {
-            throw new Error("Server API Error");
-        }
-    } catch (err) {
-        const allLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-        dayLogs = allLogs.filter(l => l.date === dateStr);
-    }
+    // FIX: Strictly use synced local storage to prevent cloud-overwrite glitches
+    const allLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const dayLogs = allLogs.filter(l => l.date === dateStr);
 
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
@@ -3756,7 +3746,7 @@ async function saveEditLogModal() {
         return;
     }
 
-    await pullFromCloud();
+
     let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const students = JSON.parse(localStorage.getItem('students')) || [];
     const student = students.find(s => String(s.id) === String(idNum));
@@ -3815,8 +3805,12 @@ async function saveEditLogModal() {
         }
     }
 
+    // Save locally immediately
     localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-    await pushLogsToCloud();
+    
+    // Push safely to the cloud
+    try { await pushLogsToCloud(); } catch(e) { console.error("Cloud push failed:", e); }
+    
     renderHistoryTable(dateStr);
     renderMainDashboard();
     closeEditLogModal();

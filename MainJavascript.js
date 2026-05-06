@@ -24,8 +24,10 @@ setInterval(async () => {
     checkDeviceLock(); 
 
     if (isAuthenticated()) {
-        await sendHeartbeat();
+        if (typeof sendHeartbeat === 'function') await sendHeartbeat(); 
         
+        autoRestoreServerData();
+
         if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
             renderStudents();
             renderSchedule();
@@ -572,44 +574,68 @@ function generateAdminMathCaptcha() {
 }
 
 async function createAdminAccount() {
-    if(!isAuthenticated()) return;
     const user = document.getElementById('new-admin-user').value.trim();
-    const pass = document.getElementById('new-admin-pass').value.trim();
-    const mathInput = document.getElementById('admin-math-a').value.trim();
-    const roleEl = document.getElementById('new-admin-role');
-    const role = roleEl ? roleEl.value : 'ADMIN';
-    
-    if(!user || !pass || mathInput === "") {
-        showMessage('acc-message', 'Please fill all fields', 'error');
+    const pass = document.getElementById('new-admin-pass').value;
+    const role = document.getElementById('new-admin-role').value;
+    const mathQ = document.getElementById('admin-math-q').textContent; 
+    const mathA = parseInt(document.getElementById('admin-math-a').value);
+    const msg = document.getElementById('acc-message');
+
+    const parts = mathQ.split('+');
+    const expected = parseInt(parts[0].trim()) + parseInt(parts[1].trim());
+
+    if (!user || !pass) {
+        msg.textContent = "Username and Password are required.";
+        msg.className = "message error";
         return;
     }
 
-    if(parseInt(mathInput) !== adminMathAns) {
-        showMessage('acc-message', 'Incorrect security math answer.', 'error');
-        generateAdminMathCaptcha();
+    if (mathA !== expected) {
+        msg.textContent = "Security math check failed.";
+        msg.className = "message error";
         return;
     }
 
     try {
         const response = await fetch(`${API_BASE_URL}/add-account`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_SECRET_KEY },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Admin-Key': 'SupportAdmin@2026' 
+            },
             body: JSON.stringify({ username: user, password: pass, role: role })
         });
 
         const data = await response.json();
-        if(data.success) {
-            showMessage('acc-message', 'Account created successfully!', 'success');
+        if (response.ok) {
+            msg.textContent = "Account created successfully!";
+            msg.className = "message success";
             document.getElementById('new-admin-user').value = '';
             document.getElementById('new-admin-pass').value = '';
-            generateAdminMathCaptcha(); 
+            document.getElementById('admin-math-a').value = '';
+            
+            // Generate new math question if you have that function
+            try { generateMathQuestion(); } catch(e){}
+
+            // ==========================================
+            // NEW: SAVE CLOUD BACKUP TO SURVIVE WIPES
+            // ==========================================
+            let backup = JSON.parse(localStorage.getItem('cloud_accounts_backup')) || [];
+            backup = backup.filter(a => a.username !== user); // Remove old version if updating
+            backup.push({ username: user, password: pass, role: role });
+            localStorage.setItem('cloud_accounts_backup', JSON.stringify(backup));
+            
+            // Push backup to your cloud
+            try { await pushLogsToCloud(); } catch(e){} 
+            
             fetchAdminAccounts();
         } else {
-            showMessage('acc-message', data.message, 'error');
-            generateAdminMathCaptcha(); 
+            msg.textContent = data.message || "Failed to create account.";
+            msg.className = "message error";
         }
-    } catch(err) {
-        showMessage('acc-message', 'Server error connection to backend.', 'error');
+    } catch (err) {
+        msg.textContent = "Server connection error.";
+        msg.className = "message error";
     }
 }
 
@@ -677,17 +703,27 @@ function timeSinceEpoch(epochMillis) {
 }
 
 async function deleteAdminAccount(user) {
-    if(!isAuthenticated()) return;
-    if(!confirm(`Are you sure you want to delete the account: ${user}?`)) return;
+    if (!confirm(`Are you sure you want to permanently delete the account: ${user}?`)) return;
+
     try {
-        const response = await fetch(`${API_BASE_URL}/delete-account/${user}`, { 
+        const response = await fetch(`${API_BASE_URL}/delete-account/${user}`, {
             method: 'DELETE',
-            headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
+            headers: { 'X-Admin-Key': 'SupportAdmin@2026' }
         });
-        const data = await response.json();
-        if(data.success) fetchAdminAccounts();
-        else alert(data.message);
-    } catch(err) {}
+
+        if (response.ok) {
+            let backup = JSON.parse(localStorage.getItem('cloud_accounts_backup')) || [];
+            backup = backup.filter(a => a.username !== user);
+            localStorage.setItem('cloud_accounts_backup', JSON.stringify(backup));
+            try { await pushLogsToCloud(); } catch(e){}
+
+            fetchAdminAccounts();
+        } else {
+            alert("Failed to delete account.");
+        }
+    } catch (err) {
+        alert("Server connection error.");
+    }
 }
 
 async function generateRegistrationLink() {
@@ -2980,92 +3016,119 @@ function renderMainDashboard() {
 }
 
 function renderDashboardSummary() {
-    if(!isAuthenticated()) return;
+    if (!isAuthenticated()) return;
     const students = JSON.parse(localStorage.getItem('students')) || [];
-    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
     const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    const tbody = document.getElementById('summary-body');
     
-    const searchInput = document.getElementById('search-attendance-global');
-    const sortSelect = document.getElementById('sort-attendance-global');
+    let todayObj = new Date();
+    if (sessionStorage.getItem('dev_time_travel') === 'true') {
+        const sd = sessionStorage.getItem('dev_sim_date');
+        if (sd) todayObj = new Date(sd);
+    }
     
-    const query = searchInput ? searchInput.value.toLowerCase() : '';
-    const sortVal = sortSelect ? sortSelect.value : 'NAME_ASC';
+    const dateOpts = { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric' };
+    let todayStr = todayObj.toLocaleDateString('en-US', dateOpts);
     
-    if (!tbody) return;
-    tbody.innerHTML = '';
+    let simDay = sessionStorage.getItem('dev_sim_day');
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDayStr = simDay || dayNames[todayObj.getDay()];
 
-    const shift = getShiftDateDetails();
-    const todayStr = shift.dateStr;
-    const currentDay = shift.dayStr;
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
+    const total = validStudents.length;
 
-    const scheduledToday = validStudents.filter(student => student.assignedDays && student.assignedDays.includes(currentDay));
+    const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(targetDayStr));
+    const todayLogs = logs.filter(l => l.date === todayStr);
 
-    let filteredStudents = scheduledToday.filter(student => 
-        (student.name || '').toLowerCase().includes(query) || 
-        String(student.id).toLowerCase().includes(query)
-    );
+    let present = 0;
+    let absent = 0;
+    let late = 0;
+    let freshPresent = 0;
+    let upperPresent = 0;
 
-    filteredStudents.sort((a, b) => {
-        const nameA = (a.name || '').toLowerCase().trim();
-        const nameB = (b.name || '').toLowerCase().trim();
-        const idA = (a.id || '').toString().trim();
-        const idB = (b.id || '').toString().trim();
-        const classA = (a.classLevel || 'zzzz').toLowerCase().trim();
-        const classB = (b.classLevel || 'zzzz').toLowerCase().trim();
+    scheduledStudents.forEach(s => {
+        const studentLogs = todayLogs.filter(l => String(l.id) === String(s.id));
+        const hasIn = studentLogs.some(l => l.action.includes('Time In') && !l.action.includes('Exempted'));
+        const isExempt = studentLogs.some(l => l.action.includes('Exempted'));
+        const isLate = studentLogs.some(l => l.action.includes('Late'));
 
-        if (sortVal === 'NAME_ASC') return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
-        if (sortVal === 'NAME_DESC') return nameA > nameB ? -1 : (nameA < nameB ? 1 : 0);
-        if (sortVal === 'ID_ASC') return idA.localeCompare(idB, undefined, {numeric: true});
-        if (sortVal === 'CLASS_FRESH') {
-            if (classA === 'freshmen' && classB !== 'freshmen') return -1;
-            if (classA !== 'freshmen' && classB === 'freshmen') return 1;
-            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
+        if (hasIn || isExempt) {
+            present++;
+            if (isLate) late++;
+            
+            // Count Present by Class Level
+            const lvl = (s.classLevel || 'UpperClassmen').toLowerCase();
+            if (lvl === 'freshmen') {
+                freshPresent++;
+            } else {
+                upperPresent++;
+            }
+        } else {
+            absent++;
         }
-        if (sortVal === 'CLASS_UPPER') {
-            if (classA === 'upperclassmen' && classB !== 'upperclassmen') return -1;
-            if (classA !== 'upperclassmen' && classB === 'upperclassmen') return 1;
-            return nameA < nameB ? -1 : (nameA > nameB ? 1 : 0);
-        }
-        return 0; 
     });
 
-    filteredStudents.forEach(student => {
-        const hasTimedOutToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('Time Out'));
-        const hasTimedInToday = logs.some(l => String(l.id) === String(student.id) && l.date === todayStr && l.action.includes('Time In'));
+    if(document.getElementById('dash-total')) document.getElementById('dash-total').textContent = total;
+    if(document.getElementById('dash-ratio')) document.getElementById('dash-ratio').textContent = `${present} / ${scheduledStudents.length}`;
+    if(document.getElementById('dash-rate')) document.getElementById('dash-rate').textContent = scheduledStudents.length > 0 ? Math.round((present / scheduledStudents.length) * 100) + '%' : '0%';
+    if(document.getElementById('dash-present')) document.getElementById('dash-present').textContent = present;
+    if(document.getElementById('dash-absent')) document.getElementById('dash-absent').textContent = absent;
+    if(document.getElementById('dash-late')) document.getElementById('dash-late').textContent = late;
+    
+    if(document.getElementById('dash-fresh-present')) document.getElementById('dash-fresh-present').textContent = freshPresent;
+    if(document.getElementById('dash-upper-present')) document.getElementById('dash-upper-present').textContent = upperPresent;
+
+    const now = todayObj.getTime();
+    const inactiveFreshmen = [];
+    const inactiveUpper = [];
+
+    validStudents.forEach(s => {
+        const sLogs = logs.filter(l => String(l.id) === String(s.id));
+        let daysInactive = 999; 
         
-        let todayShiftBtn = '';
-        if (hasTimedOutToday) {
-            todayShiftBtn = `<button onclick="viewTodayShift('${student.id}', '${todayStr}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 12px; border-radius: 4px; font-size: 10px; font-weight: bold; border: 1px solid var(--accent); cursor: pointer; white-space: nowrap;">TODAY SHIFT</button>`;
+        if (sLogs.length > 0) {
+            const sortedLogs = sLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+            const lastLogDate = new Date(sortedLogs[0].date).getTime();
+            daysInactive = Math.floor((now - lastLogDate) / (1000 * 60 * 60 * 24));
         }
 
-        let rowBg = 'transparent';
-        if (hasTimedOutToday) {
-            rowBg = 'rgba(34, 197, 94, 0.15)'; 
-        } else if (hasTimedInToday) {
-            rowBg = 'rgba(245, 158, 11, 0.15)'; 
+        if (daysInactive >= 8) {
+            const classLvl = (s.classLevel || 'UpperClassmen').toLowerCase();
+            const displayDays = daysInactive >= 999 ? "No logs" : `${daysInactive} days`;
+            const obj = { name: s.name || 'Unknown', days: displayDays };
+            
+            if (classLvl === 'freshmen') {
+                inactiveFreshmen.push(obj);
+            } else {
+                inactiveUpper.push(obj);
+            }
         }
-
-        let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
-
-        const tr = document.createElement('tr');
-        tr.style.backgroundColor = rowBg;
-        tr.innerHTML = `
-            <td><strong style="color: var(--text-main);">${student.name || 'Unknown'}</strong></td>
-            <td>${classTagHtml}</td>
-            <td style="color: var(--text-muted);">${student.id}</td>
-            <td>
-                <div class="button-cell-wrap">
-                    ${todayShiftBtn}
-                    <button onclick="viewPerformance('${student.id}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 6px 15px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); letter-spacing: 1px; cursor: pointer;">
-                        VIEW
-                    </button>
-                </div>
-            </td>
-        `;
-        tbody.appendChild(tr);
     });
-    applyVisitorMode();
+
+    const renderInactive = (id, list) => {
+        const container = document.getElementById(id);
+        if (!container) return;
+        container.innerHTML = '';
+        if (list.length === 0) {
+            container.innerHTML = '<span style="font-size: 11px; color: var(--text-muted);">None</span>';
+            return;
+        }
+        list.forEach(item => {
+            container.innerHTML += `
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 6px 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 10px; color: var(--text-main); font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px;" title="${item.name}">${item.name}</span>
+                    <span style="font-size: 9px; color: #ef4444; font-weight: bold; flex-shrink: 0; background: rgba(239,68,68,0.1); padding: 2px 4px; border-radius: 3px;">${item.days}</span>
+                </div>
+            `;
+        });
+    };
+
+    renderInactive('dash-inactive-freshmen', inactiveFreshmen);
+    renderInactive('dash-inactive-upper', inactiveUpper);
+
+    try {
+        if(typeof renderDashboardCharts === 'function') renderDashboardCharts(present, absent, scheduledStudents.length, logs, todayStr);
+        if(typeof renderTopPerformance === 'function') renderTopPerformance(validStudents, logs);
+    } catch(e) {}
 }
 
 function viewPerformance(idNum) {
@@ -3807,3 +3870,54 @@ async function sendHeartbeat() {
         }
     }, 1000);
 })();
+
+let isServerRebooting = false;
+
+async function autoRestoreServerData() {
+    if (isServerRebooting) return;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/accounts`);
+        if (!response.ok) return;
+        
+        const serverAccounts = await response.json();
+        
+        // If the server ONLY has the default DEVELOPER account, Render wiped the disk!
+        if (serverAccounts.length === 1 && serverAccounts[0].username === 'DEVELOPER') {
+            isServerRebooting = true;
+            console.warn("⚠️ Server wipe detected! Restoring accounts from Cloud Backup...");
+            
+            // Force pull latest data from cloud just to be safe
+            try { await pullFromCloud(); } catch(e) {}
+            
+            const backup = JSON.parse(localStorage.getItem('cloud_accounts_backup')) || [];
+            let restoredCount = 0;
+            
+            for (const acc of backup) {
+                if (acc.username !== 'DEVELOPER') {
+                    // Inject account back into the Java server
+                    await fetch(`${API_BASE_URL}/add-account`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-Admin-Key': 'SupportAdmin@2026'
+                        },
+                        body: JSON.stringify({ username: acc.username, password: acc.password, role: acc.role })
+                    });
+                    restoredCount++;
+                }
+            }
+            
+            if (restoredCount > 0) {
+                console.log(`✅ Successfully restored ${restoredCount} accounts to the server.`);
+                // Force UI to update
+                if (document.getElementById('sec-settings').classList.contains('active')) {
+                    fetchAdminAccounts(); 
+                }
+            }
+            isServerRebooting = false;
+        }
+    } catch (e) {
+        isServerRebooting = false;
+    }
+}

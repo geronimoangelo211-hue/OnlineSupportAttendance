@@ -1501,110 +1501,65 @@ async function handleTimeIn() {
     } catch(e) {}
 }
 
-async function handleTimeOut() {
-    const idInput = document.getElementById('student-id-input'); 
-    const messageEl = document.getElementById('student-message');
-
-    if (!idInput || !messageEl) {
-        console.error("System Error: Could not find the ID input or message element.");
-        return;
-    }
-
-    const studentId = idInput.value.trim();
-
-    if (!studentId) {
-        messageEl.textContent = "Please enter your Student ID Number.";
-        messageEl.className = "message error";
-        return;
-    }
-
-    const timeWindow = getCurrentTimeWindow();
-
-    if (timeWindow === "LOCKOUT") {
-        messageEl.textContent = "System Locked (12:01 PM - 4:59 PM). Time Out opens at 5:00 PM.";
-        messageEl.className = "message error";
-        return;
-    }
-    if (timeWindow === "TIME_IN_NORMAL" || timeWindow === "TIME_IN_LATE" || timeWindow === "TOO_EARLY") {
-        messageEl.textContent = "It is too early to Time Out. Time Out opens at 5:00 PM.";
-        messageEl.className = "message error";
-        return;
-    }
-
-    let actionStr = "Time Out";
-    if (timeWindow === "TIME_OUT_LATE") {
-        actionStr = "Time Out (Late)"; 
-    }
-
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    const shift = getShiftDateDetails();
-
-    const student = students.find(s => String(s.id).toLowerCase() === studentId.toLowerCase());
-    
-    if (!student) {
-        messageEl.textContent = "Student ID not found. Please register first.";
-        messageEl.className = "message error";
-        return;
-    }
-
-    if (!student.assignedDays || !student.assignedDays.includes(shift.dayStr)) {
-        messageEl.textContent = `You are not scheduled for duty today (${shift.dayStr}).`;
-        messageEl.className = "message error";
-        return;
-    }
-
-    const hasTimedIn = logs.some(l => 
-        String(l.id).toLowerCase() === studentId.toLowerCase() && 
-        l.date === shift.dateStr && 
-        l.action.includes('Time In')
-    );
-
-    if (!hasTimedIn) {
-        messageEl.textContent = "You cannot Time Out because you have no Time In record for today.";
-        messageEl.className = "message error";
-        return;
-    }
-
-    const alreadyTimedOut = logs.some(l => 
-        String(l.id).toLowerCase() === studentId.toLowerCase() && 
-        l.date === shift.dateStr && 
-        l.action.includes('Time Out')
-    );
-
-    if (alreadyTimedOut) {
-        messageEl.textContent = "You have already timed out for this shift.";
-        messageEl.className = "message error";
-        return;
-    }
-
-    const newLog = {
-        name: student.name,
-        id: student.id,
-        action: actionStr,
-        time: shift.realTimeStr,
-        date: shift.dateStr,
-        details: null
-    };
-
-    logs.push(newLog);
-    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-    
-    messageEl.textContent = `Success: ${student.name} - ${actionStr} at ${shift.realTimeStr}`;
-    messageEl.className = "message success";
-    idInput.value = ''; 
+function getShiftDateDetails() {
+    let now = new Date();
+    let simSettings = null;
 
     try {
-        await pushLogsToCloud();
-    } catch (e) {
-        console.error("Cloud push failed, but data is saved locally.", e);
-    }
-
-    try {
-        if (typeof renderAttendanceLogs === 'function') renderAttendanceLogs();
-        if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
-        if (typeof renderAttendanceSummary === 'function') renderAttendanceSummary();
+        const simStr = localStorage.getItem('dev_sim_settings');
+        if (simStr) simSettings = JSON.parse(simStr);
     } catch(e) {}
+
+    let manualDayOverride = null;
+
+    if (simSettings && simSettings.active) {
+        if (simSettings.date && simSettings.time) {
+            now = new Date(`${simSettings.date}T${simSettings.time}`);
+        } else if (simSettings.date) {
+            now = new Date(`${simSettings.date}T${now.toTimeString().split(' ')[0]}`);
+        } else if (simSettings.time) {
+            now = new Date(`${now.toISOString().split('T')[0]}T${simSettings.time}`);
+        }
+        if (simSettings.day) manualDayOverride = simSettings.day;
+    }
+
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    let shiftDateObj = new Date(now.getTime());
+    let isRollover = false;
+    
+    if (hours < 4 || (hours === 4 && minutes === 0)) {
+        shiftDateObj.setDate(shiftDateObj.getDate() - 1);
+        isRollover = true; 
+    }
+
+    const optionsDate = { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric' };
+    const dateStr = shiftDateObj.toLocaleDateString('en-US', optionsDate);
+
+    const optionsTime = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+    const realTimeStr = now.toLocaleTimeString('en-US', optionsTime);
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    let dayStr = dayNames[shiftDateObj.getDay()];
+
+    if (manualDayOverride && !simSettings.date) {
+        let forcedDayIndex = dayNames.indexOf(manualDayOverride);
+        if (isRollover) {
+            forcedDayIndex -= 1;
+            if (forcedDayIndex < 0) forcedDayIndex = 6; 
+        }
+        dayStr = dayNames[forcedDayIndex];
+    } 
+
+    return { 
+        dateStr, 
+        realTimeStr, 
+        dayStr, 
+        nowObj: now, 
+        shiftObj: shiftDateObj, 
+        isSimulated: !!simSettings 
+    };
 }
 
 async function finalizeTimeOut() {

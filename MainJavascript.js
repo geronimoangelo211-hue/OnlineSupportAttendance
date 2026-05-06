@@ -4164,7 +4164,7 @@ async function handleTimeOut() {
     } catch(e) {}
 }
 
-function askForShiftReport(defaultGc, defaultName) {
+function askForShiftReport(defaultGc) {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.id = 'shift-report-modal';
@@ -4186,16 +4186,32 @@ function askForShiftReport(defaultGc, defaultName) {
             <h3 style="color: var(--accent, #66fcf1); margin-top: 0; text-align: center;">End of Shift Report</h3>
             <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-bottom: 20px;">Please provide your final shift details to complete your Time Out.</p>
             
+            <!-- 1. Input Bar for GC Handle -->
             <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">GC Handle:</label>
             <input type="text" id="rep-gc" value="${defaultGc || ''}" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; outline: none;">
             
-            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">Announcement:</label>
-            <textarea id="rep-ann" rows="4" placeholder="Paste your announcement here..." style="width: 100%; padding: 10px; margin-bottom: 15px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; resize: vertical; outline: none;"></textarea>
+            <!-- 2. Circle Buttons (Radio) for Announcement -->
+            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 8px;">Announcement:</label>
+            <div style="display: flex; gap: 20px; margin-bottom: 20px; background: #121419; padding: 10px; border: 1px solid #333a45; border-radius: 6px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                    <input type="radio" name="rep-ann" value="Yes" style="accent-color: var(--accent, #66fcf1); width: 16px; height: 16px; cursor: pointer;"> Yes
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                    <input type="radio" name="rep-ann" value="No" style="accent-color: var(--accent, #66fcf1); width: 16px; height: 16px; cursor: pointer;"> No
+                </label>
+            </div>
             
-            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">Posted By:</label>
-            <input type="text" id="rep-name" value="${defaultName || ''}" style="width: 100%; padding: 10px; margin-bottom: 20px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; outline: none;">
+            <!-- 3. Dropdown for Posted By -->
+            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">Posted By / Status:</label>
+            <select id="rep-name" style="width: 100%; padding: 10px; margin-bottom: 25px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; outline: none; cursor: pointer; font-size: 13px;">
+                <option value="" disabled selected>-- Select an option --</option>
+                <option value="Me">Me</option>
+                <option value="TL/ATL">TL/ATL</option>
+                <option value="No Cascade/Pending Question Today">No Cascade/Pending Question Today</option>
+                <option value="Co-Online Support">Co-Online Support</option>
+            </select>
             
-            <button id="rep-submit" style="width: 100%; padding: 12px; background: var(--accent, #66fcf1); color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-transform: uppercase;">Submit & Time Out</button>
+            <button id="rep-submit" style="width: 100%; padding: 14px; background: var(--accent, #66fcf1); color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.2s;">Submit & Time Out</button>
         `;
 
         overlay.appendChild(box);
@@ -4203,11 +4219,13 @@ function askForShiftReport(defaultGc, defaultName) {
 
         document.getElementById('rep-submit').onclick = () => {
             const gc = document.getElementById('rep-gc').value.trim();
-            const ann = document.getElementById('rep-ann').value.trim();
-            const name = document.getElementById('rep-name').value.trim();
+            const name = document.getElementById('rep-name').value;
+            
+            const annRadio = document.querySelector('input[name="rep-ann"]:checked');
+            const ann = annRadio ? annRadio.value : '';
             
             if (!gc || !ann || !name) {
-                alert("Please fill in all fields before timing out.");
+                alert("Please complete all fields (GC Handle, Announcement Yes/No, and Dropdown) before timing out.");
                 return;
             }
 

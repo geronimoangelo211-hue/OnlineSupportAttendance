@@ -254,6 +254,8 @@ window.resolveSync = async function(action) {
     }
 }
 
+let lastConfigPushTime = 0;
+
 async function pullFromCloud() {
     try {
         const response = await fetch(`${API_BASE_URL}/sync/pull`);
@@ -267,20 +269,23 @@ async function pullFromCloud() {
             const localLogs = localStorage.getItem('attendanceLogs');
 
             if (!serverHasStudents && !serverHasLogs && (localStudents || localLogs)) {
-                console.log("Server is empty! Auto-pushing local data to the cloud database...");
                 await pushLogsToCloud();
                 return; 
             }
 
-            if (serverHasStudents) {
-                localStorage.setItem('students', data.students);
-            }
-            if (serverHasLogs) {
-                localStorage.setItem('attendanceLogs', data.logs);
+            if (serverHasStudents) localStorage.setItem('students', data.students);
+            if (serverHasLogs) localStorage.setItem('attendanceLogs', data.logs);
+            
+            // FIX: Only overwrite the Lock Config if 5 seconds have passed since you clicked the switch
+            if (data.config && data.config !== "{}" && data.config !== "null") {
+                if (Date.now() - lastConfigPushTime > 5000) {
+                    localStorage.setItem('sys_config', data.config);
+                    applySystemConfig(); 
+                }
             }
         }
     } catch (e) {
-        console.error("Cloud pull failed. Continuing with local memory.", e);
+        console.error("Cloud pull failed.", e);
     }
 }
 
@@ -299,6 +304,7 @@ async function pushStudentsToCloud() {
 async function pushLogsToCloud() {
     const studentsData = localStorage.getItem('students') || "[]";
     const logsData = localStorage.getItem('attendanceLogs') || "[]";
+    const configData = localStorage.getItem('sys_config') || '{"locked":false}'; // SYNC SETTINGS
     
     try {
         await fetch(`${API_BASE_URL}/sync/push`, {
@@ -306,11 +312,12 @@ async function pushLogsToCloud() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 students: studentsData,
-                logs: logsData
+                logs: logsData,
+                config: configData
             })
         });
     } catch (e) {
-        console.error("Cloud push failed. Data is safe locally but not backed up.", e);
+        console.error("Cloud push failed.", e);
     }
 }
 
@@ -891,79 +898,59 @@ function closeEditStudentModal() {
 
 async function saveStudentEdit() {
     if(!isAuthenticated()) return;
-    const btn = document.querySelector('#edit-student-modal .btn-primary');
-    if (btn && btn.disabled) return;
-
     const origId = document.getElementById('edit-stu-orig-id').value;
-    const name = document.getElementById('edit-stu-name').value.trim();
+    const newName = document.getElementById('edit-stu-name').value.trim();
     const newId = document.getElementById('edit-stu-id').value.trim();
-    const classLevel = document.getElementById('edit-stu-class').value;
-    let gc = document.getElementById('edit-stu-gc').value;
+    const newClass = document.getElementById('edit-stu-class').value;
+    let newGc = document.getElementById('edit-stu-gc').value;
     
-    if (gc === 'Other') gc = document.getElementById('edit-stu-gc-other').value.trim();
+    if (newGc === 'Other') {
+        newGc = document.getElementById('edit-stu-gc-other').value.trim();
+    }
 
-    if (!name || !newId) {
-        alert("Name and Student ID cannot be empty.");
+    if (!newName || !newId) {
+        alert("Name and ID cannot be empty.");
         return;
     }
 
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = "SAVING...";
-        btn.style.opacity = "0.7";
-        btn.style.cursor = "not-allowed";
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+
+    // Stop them from taking someone else's ID
+    if (origId !== newId && students.some(s => String(s.id) === newId)) {
+        alert("This Student ID is already in use by another student.");
+        return;
     }
 
-    try {
-        await pullFromCloud();
-        const students = JSON.parse(localStorage.getItem('students')) || [];
-        
-        if (newId !== origId && students.some(x => String(x.id).toLowerCase() === String(newId).toLowerCase())) {
-            alert("This Student ID is already in use by another student!");
-            return;
-        }
-
-        const s = students.find(x => String(x.id) === String(origId));
-        if (s) {
-            s.name = name;
-            s.id = newId; 
-            s.gcHandle = gc;
-            s.classLevel = classLevel;
-            localStorage.setItem('students', JSON.stringify(students));
-            await pushStudentsToCloud();
-            
-            if (origId !== newId) {
-                let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-                let logsUpdated = false;
-                logs.forEach(l => {
-                    if (String(l.id) === String(origId)) {
-                        l.id = newId;
-                        l.name = name; 
-                        logsUpdated = true;
-                    }
-                });
-                if (logsUpdated) {
-                    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
-                    await pushLogsToCloud();
-                }
-            }
-            
-            renderStudents();
-            renderSchedule();
-            renderMainDashboard();
-            renderDashboardSummary();
-            renderDutyToday();
-            if (document.getElementById('sec-history').classList.contains('active')) renderHistoryView();
-        }
-        closeEditStudentModal();
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = "Save Changes";
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-        }
+    const studentIndex = students.findIndex(s => String(s.id) === origId);
+    if (studentIndex > -1) {
+        students[studentIndex].name = newName;
+        students[studentIndex].id = newId;
+        students[studentIndex].classLevel = newClass;
+        students[studentIndex].tag = newGc;
     }
+
+    // Cascade ID changes so they don't lose their attendance history!
+    logs.forEach(l => {
+        if (String(l.id) === origId) {
+            l.id = newId;
+            l.name = newName;
+        }
+    });
+
+    localStorage.setItem('students', JSON.stringify(students));
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    
+    // FIX: Push changes to backend instantly
+    await pushLogsToCloud();
+    
+    closeEditStudentModal();
+    renderStudents();
+    renderSchedule();
+    renderDashboardSummary();
+    
+    const activeDate = document.getElementById('history-table-title')?.getAttribute('data-date');
+    if (activeDate) renderHistoryTable(activeDate);
 }
 
 async function deleteStudent(idNum) {
@@ -992,29 +979,29 @@ async function deleteStudent(idNum) {
     }
 }
 
-async function toggleStudentDay(id, day) {
+async function toggleAssignedDay(studentId, dayStr, checkbox) {
     if(!isAuthenticated()) return;
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    const student = students.find(s => String(s.id) === String(id));
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    const studentIndex = students.findIndex(s => String(s.id) === String(studentId));
     
-    if (student) {
-        if (!student.assignedDays) student.assignedDays = [];
-        if (student.assignedDays.includes(day)) {
-            student.assignedDays = student.assignedDays.filter(d => d !== day);
+    if (studentIndex > -1) {
+        if (!students[studentIndex].assignedDays) students[studentIndex].assignedDays = [];
+        
+        if (checkbox.checked) {
+            if (!students[studentIndex].assignedDays.includes(dayStr)) {
+                students[studentIndex].assignedDays.push(dayStr);
+            }
         } else {
-            student.assignedDays.push(day);
+            students[studentIndex].assignedDays = students[studentIndex].assignedDays.filter(d => d !== dayStr);
         }
         
         localStorage.setItem('students', JSON.stringify(students));
         
-        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
-            renderSchedule();
-            renderMainDashboard();
-            renderDashboardSummary();
-            renderLogs();
-            renderDutyToday();
+        try { await pushLogsToCloud(); } catch(e){} 
+        
+        if (document.getElementById('sec-dashboard') && document.getElementById('sec-dashboard').classList.contains('active')) {
+            renderDashboardSummary(); 
         }
-        pushStudentsToCloud(); 
     }
 }
 
@@ -1843,65 +1830,48 @@ function verifyDevPassword() {
     }
 }
 
-function switchAdminSection(sectionId, navElement) {
-    if(!isAuthenticated()) return;
+function switchAdminSection(sectionId, element) {
+    document.querySelectorAll('.admin-nav-item').forEach(el => el.classList.remove('active'));
+    if (element) element.classList.add('active');
     
-    let tk = sessionStorage.getItem('_auth_tkn_x92');
-    let userRole = 'ADMIN';
-    try { userRole = JSON.parse(atob(tk)).role || 'ADMIN'; } catch(e) {}
-
     document.querySelectorAll('.admin-section').forEach(sec => sec.classList.remove('active'));
-    const sec = document.getElementById(sectionId);
-    if(sec) sec.classList.add('active');
-    
-    document.querySelectorAll('.admin-nav-item').forEach(item => item.classList.remove('active'));
-    if(navElement) navElement.classList.add('active');
+    const targetSec = document.getElementById(sectionId);
+    if (targetSec) targetSec.classList.add('active');
 
-    sessionStorage.setItem('currentAdminSec', sectionId);
-
-    if (sectionId === 'sec-settings') {
-        if (userRole !== 'VISITOR') {
-            settingsClickCount++;
-            if (settingsClickCount >= 20 && document.getElementById('dev-tools-panel') && document.getElementById('dev-tools-panel').style.display !== 'flex') {
-                openDevPasswordModal();
-            }
-        }
-        fetchAdminAccounts(); 
-        generateAdminMathCaptcha();
-        checkBackendLockStatus(); 
-    } else {
-        settingsClickCount = 0; 
-    }
-
-    if (sectionId === 'sec-schedule') renderSchedule();
-    if (sectionId === 'sec-dashboard') renderMainDashboard();
-    if (sectionId === 'sec-history') renderHistoryView();
-    if (sectionId === 'sec-attendance') {
-        const tabSum = document.getElementById('tab-btn-summary');
-        if(tabSum) tabSum.click();
+    // FIX: INSTANTLY RENDER DATA WHEN TABS ARE CLICKED
+    if (sectionId === 'sec-dashboard') {
         renderDashboardSummary();
-        renderDutyToday(); 
+    } else if (sectionId === 'sec-attendance') {
+        if (document.getElementById('tab-btn-summary') && document.getElementById('tab-btn-summary').classList.contains('active')) {
+            renderAttendanceSummary();
+        } else {
+            renderLogs();
+        }
+        renderDutyToday();
+    } else if (sectionId === 'sec-data') {
+        renderStudents();
+    } else if (sectionId === 'sec-schedule') {
+        renderSchedule();
+    } else if (sectionId === 'sec-history') {
+        renderHistoryView();
+    } else if (sectionId === 'sec-settings') {
+        fetchAdminAccounts();
+        applySystemConfig();
     }
 }
 
 function switchAttendanceTab(tab) {
-    const paneSummary = document.getElementById('att-pane-summary');
-    const paneLogs = document.getElementById('att-pane-logs');
-    const btnSummary = document.getElementById('tab-btn-summary');
-    const btnLogs = document.getElementById('tab-btn-logs');
-
+    document.querySelectorAll('.sr-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('tab-btn-' + tab).classList.add('active');
+    
     if (tab === 'summary') {
-        if(paneSummary) paneSummary.style.display = 'flex';
-        if(paneLogs) paneLogs.style.display = 'none';
-        if(btnSummary) btnSummary.classList.add('active');
-        if(btnLogs) btnLogs.classList.remove('active');
-        renderDashboardSummary();
+        document.getElementById('att-pane-summary').style.display = 'flex';
+        document.getElementById('att-pane-logs').style.display = 'none';
+        renderAttendanceSummary(); // Instant render
     } else {
-        if(paneSummary) paneSummary.style.display = 'none';
-        if(paneLogs) paneLogs.style.display = 'flex';
-        if(btnSummary) btnSummary.classList.remove('active');
-        if(btnLogs) btnLogs.classList.add('active');
-        renderLogs();
+        document.getElementById('att-pane-summary').style.display = 'none';
+        document.getElementById('att-pane-logs').style.display = 'flex';
+        renderLogs(); // Instant render
     }
 }
 
@@ -3915,4 +3885,66 @@ async function autoRestoreServerData() {
     } catch (e) {
         isServerRebooting = false;
     }
+}
+
+async function toggleAttendanceState(checkbox) {
+    if(!isAuthenticated()) return;
+    const isLocked = checkbox.checked;
+    
+    const config = { locked: isLocked };
+    localStorage.setItem('sys_config', JSON.stringify(config));
+    lastConfigPushTime = Date.now(); 
+    
+    applySystemConfig();
+    
+    await pushLogsToCloud();
+}
+
+function applySystemConfig() {
+    const config = JSON.parse(localStorage.getItem('sys_config') || '{"locked":false}');
+    
+    const toggle = document.getElementById('sys-attendance-toggle');
+    if (toggle && toggle.checked !== config.locked) {
+        toggle.checked = config.locked;
+    }
+    
+    const studentLockOverlay = document.getElementById('student-lock-overlay');
+    if (studentLockOverlay) {
+        studentLockOverlay.style.display = config.locked ? 'flex' : 'none';
+    }
+}
+
+function renderAttendanceSummary() {
+    if (!isAuthenticated()) return;
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const validStudents = students.filter(s => s.id !== 'SYS_CONFIG_X99' && s.id !== 'SYS_WIPE_ALL');
+    const tbody = document.getElementById('summary-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    
+    if (validStudents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">No students registered.</td></tr>';
+        return;
+    }
+
+    validStudents.forEach(student => {
+        const sLogs = logs.filter(l => String(l.id) === String(student.id));
+        const presentCount = sLogs.filter(l => (l.action.includes('Time In') || l.action.includes('Exempted'))).length;
+        
+        let performanceStr = '<span style="color: var(--error);">0 Logs</span>';
+        if (presentCount > 0) {
+            performanceStr = `<span style="color: var(--success); font-weight: bold;">Present ${presentCount} time(s)</span>`;
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight: bold; color: var(--text-main);">${student.name || 'Unknown'}</td>
+            <td><span style="background: rgba(255,255,255,0.1); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${student.tag || '-'}</span></td>
+            <td style="color: var(--text-muted);">${student.id}</td>
+            <td>${performanceStr}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }

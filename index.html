@@ -87,7 +87,6 @@
             display: none;
         }
 
-        /* Input fields for editing time inside the history table */
         .edit-time-input {
             background: #121419;
             color: var(--accent);
@@ -241,6 +240,16 @@
                             <h4>Total Registered Students</h4>
                             <h2 id="dash-total">0</h2>
                         </div>
+                        
+                        <div class="dash-card">
+                            <h4>UpperClassmen Present</h4>
+                            <h2 id="dash-upper-present" style="color: #66fcf1;">0</h2>
+                        </div>
+                        <div class="dash-card">
+                            <h4>Freshmen Present</h4>
+                            <h2 id="dash-fresh-present" style="color: #66fcf1;">0</h2>
+                        </div>
+                        
                         <div class="dash-card">
                             <h4>Present Today</h4>
                             <h2 id="dash-present" style="color: var(--success);">0</h2>
@@ -299,10 +308,23 @@
 
                         <div style="display: flex; flex-direction: column; gap: 20px; height: 100%;">
                             
-                            <div class="panel dash-panel-standard">
-                                <h3 style="margin-top: 0; flex-shrink: 0;">Dead Students Alert</h3>
-                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px; flex-shrink: 0;">Students with ZERO logs in 21 days.</p>
-                                <div id="dash-dead-students" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; min-height: 0;"></div>
+                            <div class="panel dash-panel-standard" style="height: auto !important; max-height: 400px !important;">
+                                <h3 style="margin-top: 0; flex-shrink: 0; color: #ef4444;">Inactive Students</h3>
+                                <p class="placeholder-text" style="margin-top: 0; margin-bottom: 15px; flex-shrink: 0;">Students with ZERO logs in 8+ days.</p>
+                                
+                                <div style="display: flex; gap: 15px; flex: 1; min-height: 0;">
+                                    
+                                    <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                                        <h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">UpperClassmen</h4>
+                                        <div id="dash-inactive-upper" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; min-height: 0;"></div>
+                                    </div>
+                                    
+                                    <div style="flex: 1; display: flex; flex-direction: column; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px; min-width: 0;">
+                                        <h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Freshmen</h4>
+                                        <div id="dash-inactive-freshmen" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; min-height: 0;"></div>
+                                    </div>
+                                    
+                                </div>
                             </div>
                             
                             <div class="panel dash-panel-standard">
@@ -760,7 +782,7 @@
                     <input type="text" id="edit-log-in" placeholder="Leave blank for Absent" style="margin: 0; padding: 10px;">
                 </div>
                 <div style="display: flex; flex-direction: column;">
-                    <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">Time Out</label>
+                    <label style="color: var(--text-main); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">Time Out (e.g. 05:00:00 PM)</label>
                     <input type="text" id="edit-log-out" placeholder="Leave blank for Absent" style="margin: 0; padding: 10px;">
                 </div>
             </div>

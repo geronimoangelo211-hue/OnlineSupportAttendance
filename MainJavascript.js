@@ -4023,3 +4023,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     } catch(e) {}
 });
+
+setInterval(() => {
+    try {
+        const shift = getShiftDateDetails();
+        const banner = document.getElementById('simulated-clock-container');
+        const simDisplay = document.getElementById('simulated-time-display');
+        
+        if (shift.isSimulated) {
+            if (banner) banner.style.display = 'block';
+            if (simDisplay) simDisplay.textContent = `${shift.dayStr}, ${shift.dateStr} | ${shift.realTimeStr}`;
+        } else {
+            if (banner) banner.style.display = 'none';
+        }
+    } catch(e) {
+    }
+}, 1000);

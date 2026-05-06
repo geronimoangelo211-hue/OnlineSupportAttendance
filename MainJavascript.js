@@ -18,14 +18,35 @@ let pendingExemptCheckbox = null;
 let isSyncing = false;
 let isBackendLocked = false; 
 
-setInterval(() => {
-    if (globalTimeOffset !== 0) {
-        document.getElementById('simulated-clock-container').style.display = 'block';
-        document.getElementById('simulated-time-display').textContent = getPHT().toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute:'2-digit', second:'2-digit'});
-    } else {
-        document.getElementById('simulated-clock-container').style.display = 'none';
+setInterval(async () => {
+    await pullFromCloud(); 
+    await checkBackendLockStatus(); 
+    checkDeviceLock(); 
+
+    if (isAuthenticated()) {
+        await sendHeartbeat();
+        
+        if (document.getElementById('admin-dashboard-view').classList.contains('active')) {
+            renderStudents();
+            renderSchedule();
+            renderDashboardSummary();
+            renderLogs();
+            renderMainDashboard();
+            renderDutyToday();
+            
+            if (document.getElementById('sec-settings').classList.contains('active')) {
+                fetchAdminAccounts(); 
+            }
+            
+            const secHist = document.getElementById('sec-history');
+            if (secHist && secHist.classList.contains('active')) {
+                if (document.getElementById('history-table-container').style.display === 'none') {
+                    renderHistoryView();
+                }
+            }
+        }
     }
-}, 1000);
+}, 15000);
 
 const isAuthenticated = function() {
     const tk = sessionStorage.getItem('_auth_tkn_x92');
@@ -637,7 +658,9 @@ async function fetchAdminAccounts() {
 function timeSinceEpoch(epochMillis) {
     if (!epochMillis) return "Never logged in";
     const seconds = Math.floor((Date.now() - epochMillis) / 1000);
-    if (seconds < 0) return "Just now"; 
+    
+    // Buffer of 60 seconds to ensure the 15-sec heartbeat always says "Just now"
+    if (seconds < 60) return "Just now"; 
     
     let interval = seconds / 31536000;
     if (interval > 1) return Math.floor(interval) + " year(s) ago";
@@ -650,7 +673,6 @@ function timeSinceEpoch(epochMillis) {
     interval = seconds / 60;
     if (interval > 1) return Math.floor(interval) + "m ago";
     
-    if (seconds < 10) return "Just now";
     return Math.floor(seconds) + "s ago";
 }
 
@@ -3736,3 +3758,52 @@ async function saveEditLogModal() {
     renderMainDashboard();
     closeEditLogModal();
 }
+
+async function sendHeartbeat() {
+    if (!isAuthenticated()) return;
+    try {
+        const tk = sessionStorage.getItem('_auth_tkn_x92');
+        const parsed = JSON.parse(atob(tk));
+        if (parsed && parsed.username) {
+            await fetch(`${API_BASE_URL}/heartbeat/${parsed.username}`, {
+                method: 'POST'
+            });
+        }
+    } catch (e) {}
+}
+
+(function() {
+    // 1. Disable Right Click (Redundancy)
+    document.addEventListener('contextmenu', event => event.preventDefault());
+
+    // 2. Aggressive Keyboard Shortcut Blocker
+    document.addEventListener('keydown', function(e) {
+        if (
+            e.key === 'F12' || 
+            (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'C' || e.key === 'c' || e.key === 'J' || e.key === 'j')) || 
+            (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.key === 'S' || e.key === 's'))
+        ) {
+            e.preventDefault();
+            return false;
+        }
+    });
+
+    setInterval(function() {
+        const start = performance.now();
+        
+        eval("debugger;"); 
+        
+        const end = performance.now();
+        
+        if (end - start > 100) {
+            document.body.innerHTML = `
+                <div style="background: #121419; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ef4444; font-family: sans-serif; text-align: center; padding: 20px;">
+                    <span style="font-size: 5rem; margin-bottom: 10px;">⛔</span>
+                    <h1 style="font-size: 2.5rem; text-transform: uppercase; margin: 0; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);">Security Violation</h1>
+                    <p style="color: #94a3b8; margin-top: 15px; font-size: 1.2rem;">Developer tools detection triggered. System connection severed.</p>
+                </div>
+            `;
+            sessionStorage.clear();
+        }
+    }, 1000);
+})();

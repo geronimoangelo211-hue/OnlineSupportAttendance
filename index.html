@@ -459,6 +459,7 @@
                                     <option value="BSMT">BSMT</option>
                                     <option value="Other">Other</option>
                                 </select>
+                                
                                 <label style="color: var(--text-main); font-size: 0.85rem; font-weight: bold; margin-top: 15px; display: block;">Assign Schedule Days</label>
                                 <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; margin-bottom: 20px; background: #1e2128; padding: 15px; border-radius: 6px; border: 1px solid #334155;">
                                     <label style="color: var(--text-muted); font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer;"><input type="checkbox" value="Monday" class="new-stu-day"> Mon</label>
@@ -677,13 +678,26 @@
 
                         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 30px 0 20px 0;">
 
-                        <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Student Self-Registration Link</h4>
-                        <p class="placeholder-text" style="margin-top: 0;">Generate a secure link for students to register themselves. Generating a new link instantly disables the old one.</p>
-                        <button onclick="generateRegistrationLink()" class="btn-primary" style="margin-top: 10px; width: auto;">GENERATE SECURE LINK</button>
+                        <h4 style="color: var(--text-main); margin-bottom: 10px; font-size: 14px;">Student Self-Registration</h4>
+                        <p class="placeholder-text" style="margin-top: 0;">Enable or disable the global registration link for new students.</p>
+                        
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: #1e2128; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #334155;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="color: var(--text-main); font-weight: bold; font-size: 14px;">Allow Self-Registration</span>
+                                <span style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">If ON, students can register themselves using the link below.</span>
+                            </div>
+                            
+                            <label style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                                <input type="checkbox" id="sys-reg-toggle" onchange="toggleRegistrationState(this)" style="opacity: 0; width: 0; height: 0;">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 34px;">
+                                    <span id="reg-toggle-knob" style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
+                                </span>
+                            </label>
+                        </div>
 
-                        <div id="reg-link-container" style="display: none; margin-top: 15px; background: #121419; padding: 15px; border-radius: 6px; border: 1px dashed var(--accent);">
-                            <input type="text" id="reg-link-output" readonly style="margin: 0; padding: 10px; font-size: 13px; width: 100%; border: none; background: transparent; color: var(--accent); text-align: center;">
-                            <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY LINK TO CLIPBOARD</button>
+                        <div id="reg-link-container" style="margin-top: 15px; background: #121419; padding: 15px; border-radius: 6px; border: 1px dashed var(--accent);">
+                            <input type="text" id="reg-link-output" value="https://os-register.vercel.app/" readonly style="margin: 0; padding: 10px; font-size: 13px; width: 100%; border: none; background: transparent; color: var(--accent); text-align: center;">
+                            <button onclick="copyRegLink()" style="margin-top: 10px; width: 100%; font-size: 12px; background: rgba(var(--accent-rgb), 0.2); color: var(--accent); border: 1px solid var(--accent); padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">COPY PERMANENT LINK</button>
                         </div>
 
                         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #2d313c;">

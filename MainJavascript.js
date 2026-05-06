@@ -2081,10 +2081,23 @@ function exportToExcel(dateStr = null) {
                 } else if (timeOutLog) {
                     const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
                     outText = `${timeOutLog.time} - ${status}`;
-                    const details = timeOutLog.details || {};
-                    gc = details.gcHandle || '-';
-                    ann = details.announcement || '-';
-                    post = details.whoPosted || '-';
+                    
+                    // FIX: Smart Extraction Logic for Excel
+                    const det = timeOutLog.details;
+                    if (det) {
+                        if (typeof det === 'object') {
+                            gc = det.gcHandle || '-';
+                            ann = det.announcement || '-';
+                            post = det.whoPosted || det.postedBy || '-';
+                        } else if (typeof det === 'string') {
+                            const gcMatch = det.match(/GC Handle:\s*(.+)/);
+                            const annMatch = det.match(/Announcement:\s*(.+)/);
+                            const nameMatch = det.match(/Posted By:\s*(.+)/);
+                            if (gcMatch) gc = gcMatch[1].trim();
+                            if (annMatch) ann = annMatch[1].trim();
+                            if (nameMatch) post = nameMatch[1].trim();
+                        }
+                    }
                 } else {
                     outText = 'Absent';
                 }
@@ -2197,10 +2210,23 @@ async function recordToGoogleSheets(dateStr) {
                 } else if (timeOutLog) {
                     const status = timeOutLog.action.includes('Late') ? 'Time out(Late)' : 'Time out';
                     outText = `${timeOutLog.time} - ${status}`;
-                    const details = timeOutLog.details || {};
-                    gc = details.gcHandle || '-';
-                    ann = details.announcement || '-';
-                    post = details.whoPosted || '-';
+                    
+                    // FIX: Smart Extraction Logic for Google Sheets
+                    const det = timeOutLog.details;
+                    if (det) {
+                        if (typeof det === 'object') {
+                            gc = det.gcHandle || '-';
+                            ann = det.announcement || '-';
+                            post = det.whoPosted || det.postedBy || '-';
+                        } else if (typeof det === 'string') {
+                            const gcMatch = det.match(/GC Handle:\s*(.+)/);
+                            const annMatch = det.match(/Announcement:\s*(.+)/);
+                            const nameMatch = det.match(/Posted By:\s*(.+)/);
+                            if (gcMatch) gc = gcMatch[1].trim();
+                            if (annMatch) ann = annMatch[1].trim();
+                            if (nameMatch) post = nameMatch[1].trim();
+                        }
+                    }
                 } else {
                     outText = 'Absent';
                 }
@@ -2502,7 +2528,6 @@ async function renderHistoryTable(dateStr) {
     const searchInput = document.getElementById('search-history-logs');
     const query = searchInput ? searchInput.value.toLowerCase() : '';
 
-    // FIX: Strictly use synced local storage to prevent cloud-overwrite glitches
     const allLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
     const dayLogs = allLogs.filter(l => l.date === dateStr);
 
@@ -2542,7 +2567,7 @@ async function renderHistoryTable(dateStr) {
     tbody.innerHTML = '';
 
     if (studentsToRender.length === 0) {
-         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No records found.</td></tr>';
+         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No records found.</td></tr>';
          return;
     }
 
@@ -2586,10 +2611,22 @@ async function renderHistoryTable(dateStr) {
                 const cleanTime = timeOutLog.time.replace('Exempted', '').trim();
                 outText = `<span style="color: ${color};">${cleanTime}</span>`;
                 
-                const details = timeOutLog.details || {};
-                gc = details.gcHandle || '-';
-                ann = details.announcement || '-';
-                post = details.whoPosted || '-';
+                // FIX: Smart Extraction Logic for History Table
+                const det = timeOutLog.details;
+                if (det) {
+                    if (typeof det === 'object') {
+                        gc = det.gcHandle || '-';
+                        ann = det.announcement || '-';
+                        post = det.whoPosted || det.postedBy || '-';
+                    } else if (typeof det === 'string') {
+                        const gcMatch = det.match(/GC Handle:\s*(.+)/);
+                        const annMatch = det.match(/Announcement:\s*(.+)/);
+                        const nameMatch = det.match(/Posted By:\s*(.+)/);
+                        if (gcMatch) gc = gcMatch[1].trim();
+                        if (annMatch) ann = annMatch[1].trim();
+                        if (nameMatch) post = nameMatch[1].trim();
+                    }
+                }
             }
         }
 

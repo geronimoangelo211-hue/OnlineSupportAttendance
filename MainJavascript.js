@@ -1668,10 +1668,27 @@ function searchStudents() {
 function changeAccentColor(colorName) {
     const colorData = ACCENT_COLORS[colorName];
     if (colorData) {
-        document.documentElement.style.setProperty('--accent', colorData.hex);
-        document.documentElement.style.setProperty('--accent-rgb', colorData.rgb);
+        const root = document.documentElement;
+        root.style.setProperty('--accent', colorData.hex);
+        root.style.setProperty('--accent-rgb', colorData.rgb);
         localStorage.setItem('uiAccentColor', colorName);
+
+        let g1, g2;
+        switch(colorName) {
+            case 'Red':    g1 = '#2d0a0a'; g2 = '#4a1010'; break;
+            case 'Yellow': g1 = '#2d210a'; g2 = '#4a3610'; break;
+            case 'Green':  g1 = '#0a2d16'; g2 = '#104a23'; break;
+            case 'Blue':   g1 = '#0a282d'; g2 = '#103d4a'; break;
+            case 'Pink':   g1 = '#2d0a1f'; g2 = '#4a1033'; break;
+            case 'Purple': g1 = '#1a0a2d'; g2 = '#2b104a'; break;
+            case 'White':  g1 = '#1e2128'; g2 = '#333a45'; break;
+            default:       g1 = '#1a1c23'; g2 = '#2d313c';
+        }
         
+        root.style.setProperty('--grad-1', g1);
+        root.style.setProperty('--grad-2', g2);
+        // -----------------------------------------
+
         document.querySelectorAll('.color-btn').forEach(btn => {
             btn.style.outline = 'none';
             btn.style.transform = 'scale(1)';

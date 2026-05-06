@@ -3947,13 +3947,12 @@ function renderAttendanceSummary() {
     const todayStr = shift.dateStr;
 
     const scheduledStudents = validStudents.filter(s => s.assignedDays && s.assignedDays.includes(targetDayStr));
-    
     const todayLogs = logs.filter(l => l.date === todayStr);
 
     tbody.innerHTML = '';
     
     if (scheduledStudents.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">No students scheduled for duty today (${targetDayStr}).</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted); padding: 20px;">No students scheduled for duty today (${targetDayStr}).</td></tr>`;
         return;
     }
 
@@ -3961,22 +3960,40 @@ function renderAttendanceSummary() {
 
     scheduledStudents.forEach(student => {
         const sLogs = todayLogs.filter(l => String(l.id) === String(student.id));
-        const presentCount = sLogs.filter(l => (l.action.includes('Time In') || l.action.includes('Exempted'))).length;
+        
+        const hasIn = sLogs.some(l => l.action.includes('Time In'));
+        const hasOut = sLogs.some(l => l.action.includes('Time Out'));
+        const isExempt = sLogs.some(l => l.action.includes('Exempted'));
         
         let performanceStr = '<span style="color: var(--error);">0 Logs</span>';
-        if (presentCount > 0) {
-            performanceStr = `<span style="color: var(--success); font-weight: bold;">Present ${presentCount} time(s)</span>`;
+        if (hasIn && hasOut) {
+            performanceStr = `<span style="color: var(--success); font-weight: bold;">With Time In and Time Out</span>`;
+        } else if (hasIn) {
+            performanceStr = `<span style="color: #f59e0b; font-weight: bold;">Time In Only</span>`;
+        } else if (isExempt) {
+            performanceStr = `<span style="color: #66fcf1; font-weight: bold;">Exempted</span>`;
+        } else if (hasOut) {
+            performanceStr = `<span style="color: #f59e0b; font-weight: bold;">Time Out Only</span>`;
         }
+
+        const safeId = String(student.id).replace(/'/g, "\\'");
+        
+        const actionHtml = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                ${performanceStr}
+                <button onclick="viewPerformance('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 5px 12px; border-radius: 4px; font-size: 10px; border: 1px solid var(--accent); cursor: pointer; margin-left: 15px; font-weight: bold; white-space: nowrap;">VIEW PERF</button>
+            </div>
+        `;
 
         let gcTagHtml = (student.gcHandle || student.tag) ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px;">${student.gcHandle || student.tag}</span>` : '<span style="color: var(--text-muted); font-size: 11px; margin-right:4px;">-</span>';
         let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="font-weight: bold; color: var(--text-main);">${student.name || 'Unknown'}</td>
-            <td>${classTagHtml}${gcTagHtml}</td>
-            <td style="color: var(--text-muted);">${student.id}</td>
-            <td>${performanceStr}</td>
+            <td style="font-weight: bold; color: var(--text-main); vertical-align: middle;">${student.name || 'Unknown'}</td>
+            <td style="vertical-align: middle;">${classTagHtml}${gcTagHtml}</td>
+            <td style="color: var(--text-muted); vertical-align: middle;">${student.id}</td>
+            <td style="vertical-align: middle;">${actionHtml}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -4014,3 +4031,51 @@ setInterval(() => {
     } catch(e) {
     }
 }, 1000);
+
+function renderAttendanceLogs() {
+    if (!isAuthenticated()) return;
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const tbody = document.getElementById('attendance-logs-body');
+    if (!tbody) return;
+
+    const shift = getShiftDateDetails();
+    const todayStr = shift.dateStr;
+
+    let todayLogs = logs.filter(l => l.date === todayStr && l.id !== 'SYS_INIT_DATE' && l.id !== 'SYS_DELETED_DATE');
+
+    todayLogs.sort((a, b) => {
+        const timeA = new Date(`${a.date} ${a.time}`).getTime();
+        const timeB = new Date(`${b.date} ${b.time}`).getTime();
+        if (!isNaN(timeA) && !isNaN(timeB)) {
+            return timeB - timeA; 
+        }
+        return 0; 
+    });
+
+    tbody.innerHTML = '';
+
+    if (todayLogs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted); padding: 20px;">No logs recorded today.</td></tr>`;
+        return;
+    }
+
+    todayLogs.forEach(log => {
+        let actionColor = log.action.includes('Time In') ? 'var(--success)' : 'var(--error)';
+        if (log.action.includes('Exempted')) actionColor = '#66fcf1';
+        
+        const safeId = String(log.id).replace(/'/g, "\\'");
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight: bold; color: var(--text-main);">${log.name || 'Unknown'}</td>
+            <td style="color: var(--text-muted);">${log.id}</td>
+            <td style="color: ${actionColor}; font-weight: bold;">${log.action}</td>
+            <td style="font-family: monospace; font-size: 13px;">${log.time}</td>
+            <td>
+                <button onclick="viewTodayShiftDetails('${safeId}')" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 4px 10px; border-radius: 4px; font-size: 10px; border: 1px solid var(--accent); cursor: pointer; font-weight: bold;">DETAILS</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    try { applyVisitorMode(); } catch(e) {}
+}

@@ -914,7 +914,7 @@ async function deleteStudent(idNum) {
     }
 }
 
-async function toggleAssignedDay(studentId, dayStr, checkbox) {
+async function toggleAssignedDay(studentId, dayStr, btnElement) {
     if(!isAuthenticated()) return;
     let students = JSON.parse(localStorage.getItem('students')) || [];
     const studentIndex = students.findIndex(s => String(s.id) === String(studentId));
@@ -922,12 +922,17 @@ async function toggleAssignedDay(studentId, dayStr, checkbox) {
     if (studentIndex > -1) {
         if (!students[studentIndex].assignedDays) students[studentIndex].assignedDays = [];
         
-        if (checkbox.checked) {
-            if (!students[studentIndex].assignedDays.includes(dayStr)) {
-                students[studentIndex].assignedDays.push(dayStr);
-            }
-        } else {
+        // Check if the student currently has this day assigned
+        const hasDay = students[studentIndex].assignedDays.includes(dayStr);
+        
+        if (hasDay) {
+            // Remove the day and remove the CSS 'active' glow
             students[studentIndex].assignedDays = students[studentIndex].assignedDays.filter(d => d !== dayStr);
+            btnElement.classList.remove('active');
+        } else {
+            // Add the day and add the CSS 'active' glow
+            students[studentIndex].assignedDays.push(dayStr);
+            btnElement.classList.add('active');
         }
         
         localStorage.setItem('students', JSON.stringify(students));
@@ -2338,17 +2343,19 @@ function renderSchedule() {
         
         let togglesHtml = days.map((day, index) => {
             const isActive = student.assignedDays && student.assignedDays.includes(day);
-            return `<button class="day-toggle ${isActive ? 'active' : ''}" onclick="toggleStudentDay('${safeId}', '${day}')">${dayLabels[index]}</button>`;
+            // FIX: Pointing to the correct function name and passing 'this' button element
+            return `<button class="day-toggle ${isActive ? 'active' : ''}" onclick="toggleAssignedDay('${safeId}', '${day}', this)">${dayLabels[index]}</button>`;
         }).join('');
         
         let gcTagHtml = student.gcHandle ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px;">${student.gcHandle}</span>` : '<span style="color: var(--text-muted); font-size: 11px; margin-right:4px;">None</span>';
         let classTagHtml = student.classLevel ? `<span class="gc-tag" style="margin: 0 4px 0 0; font-size: 10px; padding: 2px 6px; background: rgba(168, 85, 247, 0.2); color: #a855f7; border-color: #a855f7;">${student.classLevel}</span>` : '';
 
         tr.innerHTML = `
-            <td style="white-space: normal;"><strong style="color: var(--text-main);">${student.name || 'Unknown'}</strong></td>
-            <td style="white-space: normal;">${classTagHtml}${gcTagHtml}</td>
-            <td style="white-space: normal; color: var(--text-muted);">${student.id}</td>
-            <td style="white-space: normal; width: 100%;">
+            <!-- FIX: Added width: 35% and min-width: 250px to stretch the Name column -->
+            <td style="white-space: normal; width: 35%; min-width: 250px;"><strong style="color: var(--text-main); font-size: 14px;">${student.name || 'Unknown'}</strong></td>
+            <td style="white-space: normal; width: 15%;">${classTagHtml}${gcTagHtml}</td>
+            <td style="white-space: normal; color: var(--text-muted); width: 15%;">${student.id}</td>
+            <td style="white-space: normal; width: 35%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">
                     <div class="day-toggles">
                         ${togglesHtml}

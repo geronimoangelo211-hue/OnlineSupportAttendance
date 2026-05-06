@@ -3047,70 +3047,6 @@ function renderDashboardSummary() {
     } catch(e) {}
 }
 
-function viewPerformance(idNum) {
-    const students = JSON.parse(localStorage.getItem('students')) || [];
-    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
-    
-    const student = students.find(s => String(s.id) === String(idNum));
-    if (!student) return;
-
-    const studentLogs = logs.filter(l => String(l.id) === String(idNum));
-
-    let onTimeIn = 0;
-    let lateIn = 0;
-    let onTimeOut = 0;
-    let lateOut = 0;
-    let bonus = 0;
-
-    studentLogs.forEach(log => {
-        if (log.action === 'Time In') onTimeIn++;
-        if (log.action === 'Time In (Late)') lateIn++;
-        if (log.action === 'Time Out') onTimeOut++;
-        if (log.action === 'Time Out (Late)') lateOut++;
-        
-        if (log.action.includes('Out') && log.details && log.details.announcement === 'Yes') {
-            bonus += 1.5;
-        }
-    });
-
-    const totalPresent = onTimeIn + lateIn; 
-    const totalActions = onTimeIn + lateIn + onTimeOut + lateOut;
-    const perfectActions = onTimeIn + onTimeOut;
-
-    let perfRate = 0;
-    if (totalActions > 0) {
-        perfRate = (perfectActions / totalActions) * 100;
-    }
-
-    perfRate += bonus;
-    perfRate = Math.round(perfRate);
-    if (perfRate > 100) perfRate = 100;
-
-    const perfStudentName = document.getElementById('perf-student-name');
-    const perfTotalPresent = document.getElementById('perf-total-present');
-    const perfOnTime = document.getElementById('perf-on-time');
-    const perfLateIn = document.getElementById('perf-late-in');
-    const perfOutTime = document.getElementById('perf-out-time');
-    const perfLateOut = document.getElementById('perf-late-out');
-    
-    if(perfStudentName) perfStudentName.textContent = student.name || 'Unknown';
-    if(perfTotalPresent) perfTotalPresent.textContent = totalPresent;
-    if(perfOnTime) perfOnTime.textContent = onTimeIn;
-    if(perfLateIn) perfLateIn.textContent = lateIn;
-    if(perfOutTime) perfOutTime.textContent = onTimeOut;
-    if(perfLateOut) perfLateOut.textContent = lateOut;
-    
-    const rateEl = document.getElementById('perf-rate');
-    if(rateEl) {
-        rateEl.textContent = `${perfRate}%`;
-        if (perfRate >= 80) rateEl.style.color = 'var(--success)';
-        else if (perfRate >= 50) rateEl.style.color = '#f59e0b';
-        else rateEl.style.color = 'var(--error)';
-    }
-
-    const modal = document.getElementById('performance-modal');
-    if(modal) modal.style.display = 'flex';
-}
 
 function closePerformanceModal() {
     const modal = document.getElementById('performance-modal');
@@ -4068,6 +4004,119 @@ function renderAttendanceLogs() {
     });
     
     try { applyVisitorMode(); } catch(e) {}
+}
+
+function openDetailsModal(studentId, dateStr) {
+    const existing = document.getElementById('shift-details-modal');
+    if (existing) existing.remove();
+
+    const logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    
+    const student = students.find(s => String(s.id) === String(studentId));
+    const studentName = student ? student.name : 'Unknown Student';
+
+    const sLogs = logs.filter(l => String(l.id) === String(studentId) && l.date === dateStr);
+    
+    const inLog = sLogs.find(l => l.action.includes('Time In'));
+    const outLog = sLogs.find(l => l.action.includes('Time Out'));
+    const exemptLog = sLogs.find(l => l.action.includes('Exempted'));
+
+    let timeInStr = inLog ? `${inLog.time} (${inLog.action.includes('Late') ? 'LATE' : 'ON TIME'})` : 'No Record';
+    let timeOutStr = outLog ? `${outLog.time} (${outLog.action.includes('Late') ? 'LATE' : 'ON TIME'})` : 'No Record';
+    
+    let timeInColor = inLog ? (inLog.action.includes('Late') ? '#f59e0b' : '#22c55e') : '#9ca3af';
+    let timeOutColor = outLog ? (outLog.action.includes('Late') ? '#f59e0b' : '#22c55e') : '#9ca3af';
+
+    if (exemptLog) {
+        timeInStr = `${exemptLog.time} (EXEMPTED)`;
+        timeOutStr = `${exemptLog.time} (EXEMPTED)`;
+        timeInColor = '#66fcf1';
+        timeOutColor = '#66fcf1';
+    }
+
+    let gc = "Not Provided", ann = "Not Provided", postedBy = "Not Provided";
+    const targetLog = outLog || exemptLog; // The report is saved inside the Time Out log
+
+    if (targetLog && targetLog.details) {
+        const detailsText = targetLog.details;
+        
+        // Scan the saved string to pull out the exact answers
+        const gcMatch = detailsText.match(/GC Handle:\s*(.+)/);
+        const annMatch = detailsText.match(/Announcement:\s*(.+)/);
+        const nameMatch = detailsText.match(/Posted By:\s*(.+)/);
+
+        if (gcMatch) gc = gcMatch[1].trim();
+        if (annMatch) ann = annMatch[1].trim();
+        if (nameMatch) postedBy = nameMatch[1].trim();
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'shift-details-modal';
+    Object.assign(overlay.style, {
+        position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+        backgroundColor: 'rgba(15, 17, 21, 0.9)', backdropFilter: 'blur(5px)',
+        display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: '9999'
+    });
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+        backgroundColor: '#1e2128', padding: '30px', borderRadius: '12px',
+        border: '1px solid #333a45', width: '90%', maxWidth: '400px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.5)', fontFamily: 'sans-serif'
+    });
+
+    box.innerHTML = `
+        <h3 style="color: #ef4444; margin: 0 0 15px 0; text-align: center; font-size: 1.2rem;">${studentName}</h3>
+        <hr style="border-color: #333a45; margin-bottom: 20px;">
+        
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+            <span style="color: #9ca3af; font-weight: bold;">Time In:</span>
+            <span style="color: ${timeInColor}; font-weight: bold;">${timeInStr}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <span style="color: #9ca3af; font-weight: bold;">Time Out:</span>
+            <span style="color: ${timeOutColor}; font-weight: bold;">${timeOutStr}</span>
+        </div>
+        
+        <hr style="border-color: #333a45; margin-bottom: 20px;">
+        
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+            <span style="color: #9ca3af; font-weight: bold;">GC Handle:</span>
+            <span style="color: #f8fafc; font-weight: bold;">${gc}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+            <span style="color: #9ca3af; font-weight: bold;">Announcement:</span>
+            <span style="color: #f8fafc; font-weight: bold;">${ann}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
+            <span style="color: #9ca3af; font-weight: bold;">Posted By:</span>
+            <span style="color: #f8fafc; font-weight: bold;">${postedBy}</span>
+        </div>
+        
+        <button id="close-details-btn" style="width: 100%; padding: 12px; background: #ef4444; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; letter-spacing: 1px;">CLOSE DETAILS</button>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    document.getElementById('close-details-btn').onclick = () => {
+        overlay.remove();
+    };
+}
+
+function viewTodayShiftDetails(studentId) {
+    const shift = getShiftDateDetails();
+    openDetailsModal(studentId, shift.dateStr);
+}
+
+function viewPerformance(studentId) {
+    const shift = getShiftDateDetails();
+    openDetailsModal(studentId, shift.dateStr);
+}
+
+function viewHistoryDetails(studentId, historyDateStr) {
+    openDetailsModal(studentId, historyDateStr);
 }
 
 async function handleTimeOut() {

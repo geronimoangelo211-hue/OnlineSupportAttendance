@@ -4069,3 +4069,150 @@ function renderAttendanceLogs() {
     
     try { applyVisitorMode(); } catch(e) {}
 }
+
+async function handleTimeOut() {
+    const idInput = document.getElementById('student-id-input'); 
+    const messageEl = document.getElementById('student-message');
+
+    if (!idInput || !messageEl) return;
+    const studentId = idInput.value.trim();
+
+    if (!studentId) {
+        messageEl.textContent = "Please enter your Student ID Number.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    const timeWindow = getCurrentTimeWindow();
+
+    if (timeWindow === "LOCKOUT") {
+        messageEl.textContent = "System Locked (12:01 PM - 4:59 PM). Time Out opens at 5:00 PM.";
+        messageEl.className = "message error";
+        return;
+    }
+    if (timeWindow === "TIME_IN_NORMAL" || timeWindow === "TIME_IN_LATE" || timeWindow === "TOO_EARLY") {
+        messageEl.textContent = "It is too early to Time Out. Time Out opens at 5:00 PM.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    let actionStr = "Time Out";
+    if (timeWindow === "TIME_OUT_LATE") actionStr = "Time Out (Late)";
+
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    let logs = JSON.parse(localStorage.getItem('attendanceLogs')) || [];
+    const shift = getShiftDateDetails();
+
+    const student = students.find(s => String(s.id).toLowerCase() === studentId.toLowerCase());
+    
+    if (!student) {
+        messageEl.textContent = "Student ID not found. Please register first.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    if (!student.assignedDays || !student.assignedDays.includes(shift.dayStr)) {
+        messageEl.textContent = `You are not scheduled for duty today (${shift.dayStr}).`;
+        messageEl.className = "message error";
+        return;
+    }
+
+    const hasTimedIn = logs.some(l => String(l.id).toLowerCase() === studentId.toLowerCase() && l.date === shift.dateStr && l.action.includes('Time In'));
+    if (!hasTimedIn) {
+        messageEl.textContent = "You cannot Time Out because you have no Time In record for today.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    const alreadyTimedOut = logs.some(l => String(l.id).toLowerCase() === studentId.toLowerCase() && l.date === shift.dateStr && l.action.includes('Time Out'));
+    if (alreadyTimedOut) {
+        messageEl.textContent = "You have already timed out for this shift.";
+        messageEl.className = "message error";
+        return;
+    }
+
+    const reportData = await askForShiftReport(student.gcHandle, student.name);
+    
+    const formattedDetails = `GC Handle: ${reportData.gc}\nAnnouncement: ${reportData.ann}\nPosted By: ${reportData.name}`;
+
+    const newLog = {
+        name: student.name,
+        id: student.id,
+        action: actionStr,
+        time: shift.realTimeStr,
+        date: shift.dateStr,
+        details: formattedDetails 
+    };
+
+    logs.push(newLog);
+    localStorage.setItem('attendanceLogs', JSON.stringify(logs));
+    
+    messageEl.textContent = `Success: Shift Report submitted and Time Out recorded!`;
+    messageEl.className = "message success";
+    idInput.value = ''; 
+
+    try {
+        await pushLogsToCloud();
+    } catch (e) {
+        console.error("Cloud push failed, but data is saved locally.", e);
+    }
+
+    try {
+        if (typeof renderAttendanceLogs === 'function') renderAttendanceLogs();
+        if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+        if (typeof renderAttendanceSummary === 'function') renderAttendanceSummary();
+    } catch(e) {}
+}
+
+function askForShiftReport(defaultGc, defaultName) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'shift-report-modal';
+        Object.assign(overlay.style, {
+            position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+            backgroundColor: 'rgba(15, 17, 21, 0.9)', backdropFilter: 'blur(5px)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: '9999'
+        });
+
+        const box = document.createElement('div');
+        Object.assign(box.style, {
+            backgroundColor: '#1e2128', padding: '30px', borderRadius: '12px',
+            border: '1px solid var(--accent, #66fcf1)', width: '90%', maxWidth: '400px',
+            boxShadow: '0 0 30px rgba(102, 252, 241, 0.2)', textAlign: 'left',
+            color: '#f8fafc', fontFamily: 'sans-serif'
+        });
+
+        box.innerHTML = `
+            <h3 style="color: var(--accent, #66fcf1); margin-top: 0; text-align: center;">End of Shift Report</h3>
+            <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-bottom: 20px;">Please provide your final shift details to complete your Time Out.</p>
+            
+            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">GC Handle:</label>
+            <input type="text" id="rep-gc" value="${defaultGc || ''}" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; outline: none;">
+            
+            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">Announcement:</label>
+            <textarea id="rep-ann" rows="4" placeholder="Paste your announcement here..." style="width: 100%; padding: 10px; margin-bottom: 15px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; resize: vertical; outline: none;"></textarea>
+            
+            <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px;">Posted By:</label>
+            <input type="text" id="rep-name" value="${defaultName || ''}" style="width: 100%; padding: 10px; margin-bottom: 20px; background: #121419; border: 1px solid #333a45; color: white; border-radius: 6px; box-sizing: border-box; outline: none;">
+            
+            <button id="rep-submit" style="width: 100%; padding: 12px; background: var(--accent, #66fcf1); color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-transform: uppercase;">Submit & Time Out</button>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        document.getElementById('rep-submit').onclick = () => {
+            const gc = document.getElementById('rep-gc').value.trim();
+            const ann = document.getElementById('rep-ann').value.trim();
+            const name = document.getElementById('rep-name').value.trim();
+            
+            if (!gc || !ann || !name) {
+                alert("Please fill in all fields before timing out.");
+                return;
+            }
+
+            document.body.removeChild(overlay);
+            resolve({ gc, ann, name });
+        };
+    });
+}
